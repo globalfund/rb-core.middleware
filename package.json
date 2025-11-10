@@ -1,0 +1,69 @@
+{
+  "name": "rb-core-middleware",
+  "version": "0.0.1",
+  "description": "Report Builder core functionality middleware",
+  "keywords": [
+    "loopback-extension",
+    "loopback"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "engines": {
+    "node": "20 || 22 || 24"
+  },
+  "scripts": {
+    "build": "lb-tsc",
+    "build:watch": "lb-tsc --watch",
+    "lint": "yarn run eslint && yarn run prettier:check",
+    "lint:fix": "yarn run eslint:fix && yarn run prettier:fix",
+    "prettier:cli": "lb-prettier \"**/*.ts\" \"**/*.js\"",
+    "prettier:check": "yarn run prettier:cli -l",
+    "prettier:fix": "yarn run prettier:cli --write",
+    "eslint": "lb-eslint --report-unused-disable-directives .",
+    "eslint:fix": "yarn run eslint --fix",
+    "pretest": "yarn run rebuild",
+    "test": "lb-mocha --allow-console-logs \"dist/__tests__\"",
+    "posttest": "yarn run lint",
+    "test:dev": "lb-mocha --allow-console-logs dist/__tests__/**/*.js && yarn run posttest",
+    "clean": "lb-clean dist *.tsbuildinfo .eslintcache",
+    "rebuild": "yarn run clean && yarn run build",
+    "initialise-server": "cd src/utils/renderChart/ && npx webpack --config webpack.config.cjs && cd ../../..",
+    "rebuild-ssr": "cd src/utils/renderChart/ && npx webpack --config webpack.config.cjs && cd ../../.."
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/globalfund/rb-core-middleware"
+  },
+  "license": "MIT",
+  "files": [
+    "README.md",
+    "dist",
+    "src",
+    "!*/__tests__"
+  ],
+  "peerDependencies": {
+    "@loopback/core": "^7.0.5"
+  },
+  "dependencies": {
+    "@loopback/core": "^7.0.5",
+    "@loopback/logging": "^0.13.6",
+    "@loopback/repository": "^8.0.5",
+    "@types/lodash": "^4.17.20",
+    "axios": "^1.13.2",
+    "lodash": "^4.17.21",
+    "loopback-connector-mongodb": "^7.0.0-alpha.8",
+    "redis": "^5.9.0",
+    "tslib": "^2.0.0",
+    "winston": "^3.18.3",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "@loopback/build": "^12.0.5",
+    "@loopback/eslint-config": "^16.0.1",
+    "@loopback/testlab": "^8.0.5",
+    "@types/node": "^16.18.126",
+    "eslint": "^8.57.1",
+    "source-map-support": "^0.5.21",
+    "typescript": "~5.2.2"
+  }
+}
