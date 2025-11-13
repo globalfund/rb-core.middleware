@@ -102,12 +102,11 @@ export class ReportService {
         "name",
         "createdDate",
         "updatedDate",
-        "showHeader",
-        "heading",
         "description",
-        "backgroundColor",
         "title",
         "public",
+        "baseline",
+        "settings",
       ],
     });
     setCache(`report-list-${userId}-${JSON.stringify(filter)}`, dataToCache);
@@ -225,18 +224,13 @@ export class ReportService {
     // Duplicate Story
     const newStory = await this.reportRepository.create({
       name: `${fReport.name} (Copy)`,
-      showHeader: fReport.showHeader,
       title: fReport.title,
       description: fReport.description,
-      heading: fReport.heading,
       rows: fReport.rows,
       public: false,
       baseline: false,
-      backgroundColor: fReport.backgroundColor,
-      titleColor: fReport.titleColor,
-      descriptionColor: fReport.descriptionColor,
-      dateColor: fReport.dateColor,
       owner: userId,
+      settings: fReport.settings,
     });
     await handleDeleteCache({ asset: "report", userId });
     return newStory;

@@ -96,6 +96,12 @@ export class ChartModel extends Entity {
   })
   updatedDate: string;
 
+  @property({
+    type: "object",
+    required: false,
+  })
+  settings: object;
+
   constructor(data?: Partial<ChartModel>) {
     super(data);
   }

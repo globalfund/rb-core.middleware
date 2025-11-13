@@ -17,31 +17,15 @@ export class ReportModel extends Entity {
 
   @property({
     type: "string",
-  })
-  nameLower: string;
-
-  @property({
-    type: "boolean",
-    default: true,
-  })
-  showHeader: boolean;
-
-  @property({
-    type: "string",
     required: false,
   })
   title: string;
 
   @property({
-    type: "object",
+    type: "string",
     required: false,
   })
-  heading: object;
-  @property({
-    type: "object",
-    required: false,
-  })
-  description: object;
+  description: string;
 
   @property({
     type: "array",
@@ -75,30 +59,9 @@ export class ReportModel extends Entity {
   @property({
     type: "string",
     required: false,
-    default: "#252c34",
+    default: "#FFFFFF",
   })
   backgroundColor: string;
-
-  @property({
-    type: "string",
-    required: false,
-    default: "#ffffff",
-  })
-  titleColor: string;
-
-  @property({
-    type: "string",
-    required: false,
-    default: "#ffffff",
-  })
-  descriptionColor: string;
-
-  @property({
-    type: "string",
-    required: false,
-    default: "#ffffff",
-  })
-  dateColor: string;
 
   @property({
     type: "string",
@@ -116,6 +79,12 @@ export class ReportModel extends Entity {
     default: () => new Date(),
   })
   updatedDate: string;
+
+  @property({
+    type: "object",
+    required: false,
+  })
+  settings: object;
 
   constructor(data?: Partial<ReportModel>) {
     super(data);
