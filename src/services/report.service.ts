@@ -6,7 +6,6 @@ import {
   repository,
   Where,
 } from "@loopback/repository";
-import axios from "axios";
 import _ from "lodash";
 import {
   ChartRepository,
@@ -17,28 +16,6 @@ import { getCache, handleDeleteCache, setCache } from "../utils/redis";
 import { Logger } from "winston";
 import { LOGGER_KEY } from "../keys";
 import { ReportModel } from "../models";
-
-async function renderStory(
-  reportRepository: ReportRepository,
-  id: string,
-  body: any,
-  userIds: string[],
-  backendApiBaseUrl: string
-) {
-  const report = await reportRepository.findById(id);
-  if (
-    !report ||
-    (!report.public &&
-      !report.baseline &&
-      userIds.indexOf(_.get(report, "owner", "")) === -1)
-  ) {
-    return;
-  }
-  const result = await (
-    await axios.post(`${backendApiBaseUrl}/render/story/${id}`, { ...body })
-  ).data;
-  return result;
-}
 
 export class ReportService {
   constructor(
@@ -137,24 +114,6 @@ export class ReportService {
     }
     this.logger.info(`ReportService - findById - unauthorized`);
     return { error: "Unauthorized", name: report.name };
-  }
-
-  async renderById(
-    id: string,
-    body: any,
-    userIds: string[],
-    backendApiBaseUrl: string
-  ) {
-    this.logger.info(
-      `ReportService - renderById - rendering report by id ${id}`
-    );
-    return renderStory(
-      this.reportRepository,
-      id,
-      body,
-      userIds,
-      backendApiBaseUrl
-    );
   }
 
   async updateById(
