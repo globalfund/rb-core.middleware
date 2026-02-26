@@ -22,7 +22,7 @@ async function renderChart(
   body: any,
   userIds: string[],
   logger: Logger,
-  parsedDataFilesPath: string
+  parsedDataFilesPath: string,
 ) {
   try {
     logger.info("fn <renderChart()> calling renderChart function");
@@ -43,7 +43,7 @@ async function renderChart(
     logger.debug(`fn <renderChart()> Writing chart data to file- ${id}.json`);
     fs.writeFileSync(
       `./src/utils/renderChart/dist/rendering/${id}.json`,
-      JSON.stringify(ob, null, 4)
+      JSON.stringify(ob, null, 4),
     );
     // execute the ./src/utiles/renderChart/dist/index.cjs with id as the parameter
     logger.debug(`fn <renderChart()> executing renderChart for chart- ${id}`);
@@ -52,21 +52,21 @@ async function renderChart(
       {
         timeout: 0,
         stdio: "ignore",
-      }
+      },
     );
     // once the rendering is done, read the output file
     logger.debug(
-      `fn <renderChart()> Reading rendered chart data from file- ${id}_rendered.json`
+      `fn <renderChart()> Reading rendered chart data from file- ${id}_rendered.json`,
     );
     const data = fs.readFileSync(
-      `./src/utils/renderChart/dist/rendering/${id}_rendered.json`
+      `./src/utils/renderChart/dist/rendering/${id}_rendered.json`,
     );
 
     logger.debug(
-      `fn <renderChart()> Reading rendered chart data from file- ${id}_rendered.json`
+      `fn <renderChart()> Reading rendered chart data from file- ${id}_rendered.json`,
     );
     logger.verbose(
-      `fn <renderChart()> rendered chart data: ${data.toString()}`
+      `fn <renderChart()> rendered chart data: ${data.toString()}`,
     );
 
     // clean temp files
@@ -76,12 +76,12 @@ async function renderChart(
 
     // return jsonified data
     logger.verbose(
-      `fn <renderChart()> Chart with id: ${id} rendered data: ${data.toString()}`
+      `fn <renderChart()> Chart with id: ${id} rendered data: ${data.toString()}`,
     );
     return JSON.parse(data.toString());
   } catch (err) {
     logger.error(
-      `fn <renderChart()> Error rendering chart with id: ${id}; error:${err.toString()} `
+      `fn <renderChart()> Error rendering chart with id: ${id}; error:${err.toString()} `,
     );
     console.error(err);
     return { error: "Error rendering chart!" };
@@ -96,12 +96,12 @@ export class ChartService {
     @repository(DatasetRepository)
     public datasetRepository: DatasetRepository,
 
-    @inject(LOGGER_KEY) private logger: Logger
+    @inject(LOGGER_KEY) private logger: Logger,
   ) {}
 
   async create(
     userId: string,
-    chart: Omit<ChartModel, "id">
+    chart: Omit<ChartModel, "id">,
   ): Promise<ChartModel | { error: string; errorType: string }> {
     chart.owner = userId;
     this.logger.info(`ChartService - create - Creating chart: ${chart.name}`);
@@ -112,7 +112,7 @@ export class ChartService {
   async sampleData(
     datasetId: string,
     userIds: string[],
-    backendApiBaseUrl: string
+    backendApiBaseUrl: string,
   ) {
     const dataset = await this.datasetRepository.findById(datasetId);
     if (
@@ -125,18 +125,18 @@ export class ChartService {
     const cachedData = await getCache(`dataset-sample-data-${datasetId}`);
     if (cachedData) {
       this.logger.info(
-        `ChartService - sampleData - Returning cached sample data for dataset ${datasetId}`
+        `ChartService - sampleData - Returning cached sample data for dataset ${datasetId}`,
       );
       return cachedData;
     }
     this.logger.info(
-      `ChartService - sampleData - Fetching sample data for dataset ${datasetId}`
+      `ChartService - sampleData - Fetching sample data for dataset ${datasetId}`,
     );
     return axios
       .get(`${backendApiBaseUrl}/sample-data/${datasetId}`)
       .then((res) => {
         this.logger.info(
-          `ChartService - sampleData - Sample data fetched for dataset ${datasetId}`
+          `ChartService - sampleData - Sample data fetched for dataset ${datasetId}`,
         );
         const dataToCache = {
           count: _.get(res, "data.result.count", []),
@@ -151,7 +151,7 @@ export class ChartService {
       .catch((e) => {
         console.log(e);
         this.logger.error(
-          `ChartService - sampleData - Error fetching sample data for dataset ${datasetId}; ${e.response.data.result}`
+          `ChartService - sampleData - Error fetching sample data for dataset ${datasetId}; ${e.response.data.result}`,
         );
         return {
           data: [],
@@ -162,7 +162,7 @@ export class ChartService {
 
   async totalCount(): Promise<Count> {
     this.logger.verbose(
-      `ChartService - totalCount - Fetching total chart count`
+      `ChartService - totalCount - Fetching total chart count`,
     );
     return this.chartRepository.count();
   }
@@ -177,7 +177,7 @@ export class ChartService {
 
   async find(
     userId: string,
-    filter?: Filter<ChartModel>
+    filter?: Filter<ChartModel>,
   ): Promise<ChartModel[]> {
     if (filter?.order && filter.order.includes("name")) {
       // @ts-ignore
@@ -185,7 +185,7 @@ export class ChartService {
     }
 
     const cachedData = await getCache(
-      `chart-list-${userId}-${JSON.stringify(filter)}`
+      `charts-${userId}-${JSON.stringify(filter)}`,
     );
     if (cachedData) {
       this.logger.info(`ChartService - find - Returning cached charts list`);
@@ -212,18 +212,18 @@ export class ChartService {
         "owner",
       ],
     });
-    setCache(`chart-list-${userId}-${JSON.stringify(filter)}`, dataToCache);
+    setCache(`charts-${userId}-${JSON.stringify(filter)}`, dataToCache);
     return dataToCache;
   }
 
   async getChartTypes(id: string, aiApiBaseUrl: string) {
     this.logger.info(
-      `ChartService - getChartTypes - Fetching AI suggestions for chart type`
+      `ChartService - getChartTypes - Fetching AI suggestions for chart type`,
     );
     const cachedData = await getCache(`chart-types-ai-suggestions-${id}`);
     if (cachedData) {
       this.logger.info(
-        `ChartService - getChartTypes - Returning cached AI suggestions`
+        `ChartService - getChartTypes - Returning cached AI suggestions`,
       );
       return cachedData;
     }
@@ -234,12 +234,12 @@ export class ChartService {
           headers: {
             Authorization: "ZIMMERMAN",
           },
-        }
+        },
       );
       this.logger.info(
         `ChartService - getChartTypes - AI suggestions fetched returning ${JSON.stringify(
-          response.data
-        )}`
+          response.data,
+        )}`,
       );
       const result = response.data.result;
       const parsedResult = result.map((r: string) => JSON.parse(r));
@@ -250,7 +250,7 @@ export class ChartService {
             newObject[key.toLowerCase()] = r[key];
           });
           return newObject;
-        }
+        },
       );
       setCache(`chart-types-ai-suggestions-${id}`, lowercaseParsedResult);
       return lowercaseParsedResult;
@@ -262,12 +262,12 @@ export class ChartService {
 
   async updateAll(
     chart: ChartModel,
-    where?: Where<ChartModel>
+    where?: Where<ChartModel>,
   ): Promise<Count> {
     this.logger.info(
       `ChartService - updateAll - Updating chart - ${chart.id}; where: ${JSON.stringify(
-        where
-      )}`
+        where,
+      )}`,
     );
     return this.chartRepository.updateAll(chart, where);
   }
@@ -275,16 +275,16 @@ export class ChartService {
   async findById(
     id: string,
     userIds: string[],
-    filter?: FilterExcludingWhere<ChartModel>
+    filter?: FilterExcludingWhere<ChartModel>,
   ): Promise<ChartModel | { name: string; error: string }> {
     this.logger.info(`ChartService - findById - Fetching chart - ${id}`);
     this.logger.debug(
-      `Finding chart - ${id} with filter - ${JSON.stringify(filter)}`
+      `Finding chart - ${id} with filter - ${JSON.stringify(filter)}`,
     );
     const cachedData = await getCache(`chart-${id}-${JSON.stringify(filter)}`);
     if (cachedData) {
       this.logger.info(
-        `ChartService - findById - Returning cached chart - ${id}`
+        `ChartService - findById - Returning cached chart - ${id}`,
       );
       return cachedData;
     }
@@ -299,7 +299,7 @@ export class ChartService {
       return chart;
     } else {
       this.logger.error(
-        `ChartService - findById - Unauthorized access to chart - ${id}`
+        `ChartService - findById - Unauthorized access to chart - ${id}`,
       );
       return { name: chart.name, error: "Unauthorized" };
     }
@@ -308,7 +308,7 @@ export class ChartService {
   async updateById(
     id: string,
     userId: string,
-    chart: ChartModel
+    chart: ChartModel,
   ): Promise<ChartModel | { error: string }> {
     const dbChart = await this.chartRepository.findById(id);
     if (dbChart.owner !== userId) {
@@ -331,7 +331,7 @@ export class ChartService {
   async replaceById(
     id: string,
     userId: string,
-    chart: ChartModel
+    chart: ChartModel,
   ): Promise<void | { error: string }> {
     const dbChart = await this.chartRepository.findById(id);
     if (dbChart.owner !== userId) {
@@ -348,7 +348,7 @@ export class ChartService {
 
   async deleteById(
     id: string,
-    userId: string
+    userId: string,
   ): Promise<void | { error: string }> {
     const dbChart = await this.chartRepository.findById(id);
     if (dbChart.owner !== userId) {
@@ -365,7 +365,7 @@ export class ChartService {
 
   async duplicate(
     id: string,
-    userId: string
+    userId: string,
   ): Promise<ChartModel | { error: string; errorType: string }> {
     this.logger.info(`ChartService - duplicate - Duplicating chart - ${id}`);
     const fChart = await this.chartRepository.findById(id);
@@ -393,7 +393,7 @@ export class ChartService {
     id: string,
     userId: string,
     body: { rows: any[] },
-    parsedDataFilesPath: string
+    parsedDataFilesPath: string,
   ) {
     this.logger.info(`ChartService - renderById - Rendering chart - ${id}`);
     const chartData =
@@ -405,19 +405,19 @@ export class ChartService {
 
     try {
       const parsedData = fs.readFileSync(
-        `${parsedDataFilesPath}${chartData.datasetId}.json`
+        `${parsedDataFilesPath}${chartData.datasetId}.json`,
       );
       parsed = JSON.parse(parsedData.toString());
     } catch (err) {
       this.logger.error(
-        `ChartService - renderById - Error fetching parsed data for dataset - ${chartData.datasetId}`
+        `ChartService - renderById - Error fetching parsed data for dataset - ${chartData.datasetId}`,
       );
       console.error(err);
     }
 
     if (!parsed?.dataset) {
       this.logger.error(
-        `ChartService - renderById - could not find parsed dataset with id - ${chartData.datasetId}`
+        `ChartService - renderById - could not find parsed dataset with id - ${chartData.datasetId}`,
       );
       return {
         error: "The data for this chart is no longer available.",
@@ -430,7 +430,7 @@ export class ChartService {
       body,
       [userId],
       this.logger,
-      parsedDataFilesPath
+      parsedDataFilesPath,
     );
   }
 }
