@@ -19,29 +19,20 @@ export class ReportModel extends Entity {
     type: "string",
     required: false,
   })
-  title: string;
-
-  @property({
-    type: "string",
-    required: false,
-  })
   description: string;
 
   @property({
     type: "array",
     itemType: "any",
   })
-  rows: {
-    items: any[]; // string: chart id, object: formatted text
-    structure: string;
-    contentWidths: {
-      id: string;
-      widths: number[];
-    }[];
-    contentHeights: {
-      id: string;
-      heights: number[];
-    }[];
+  items: {
+    id: string; // string: chart id, object: formatted text
+    type: string;
+    open: boolean;
+    focus?: boolean;
+    key?: string;
+    options?: Record<string, any>;
+    data?: any;
   }[];
 
   @property({
@@ -55,13 +46,6 @@ export class ReportModel extends Entity {
     default: false,
   })
   baseline: boolean;
-
-  @property({
-    type: "string",
-    required: false,
-    default: "#FFFFFF",
-  })
-  backgroundColor: string;
 
   @property({
     type: "string",
