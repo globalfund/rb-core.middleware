@@ -26,7 +26,7 @@ export const handleDeleteCache = async (options: {
     const assetPlural =
       options.asset === "story" ? "stories" : `${options.asset}s`;
     await Promise.all([
-      deleteKeysWithPattern(`*${assetPlural}-${options.userId}`),
+      deleteKeysWithPattern(`*${assetPlural}-${options.userId}-*`),
       deleteKeysWithPattern(`*assets-${options.userId}`),
     ]);
   }
@@ -43,7 +43,7 @@ export const getCache = async (cacheName: string) => {
 export const setCache = async (
   cacheName: string,
   result: any,
-  expiry: number = 60 * 30 // 30 minutes expiry by default
+  expiry: number = 60 * 30, // 30 minutes expiry by default
 ) => {
   await redisClient.set(cacheName, JSON.stringify(result), {
     EX: expiry,

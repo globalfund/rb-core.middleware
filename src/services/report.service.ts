@@ -37,7 +37,7 @@ export class ReportService {
   ): Promise<ReportModel | { error: string; errorType: string }> {
     this.logger.info(`ReportService - create - creating a new report`);
     report.owner = userId;
-    await handleDeleteCache({ asset: "report", userId });
+    await handleDeleteCache({ asset: "story", userId });
     return await this.reportRepository.create(report);
   }
 
@@ -59,7 +59,7 @@ export class ReportService {
     }
 
     const cachedData = await getCache(
-      `report-list-${userId}-${JSON.stringify(filter)}`,
+      `stories-${userId}-${JSON.stringify(filter)}`,
     );
     if (cachedData) {
       this.logger.info(`ReportService - find - Returning cached report list`);
@@ -85,7 +85,7 @@ export class ReportService {
         "settings",
       ],
     });
-    setCache(`report-list-${userId}-${JSON.stringify(filter)}`, dataToCache);
+    setCache(`stories-${userId}-${JSON.stringify(filter)}`, dataToCache);
     return dataToCache;
   }
 
@@ -131,7 +131,7 @@ export class ReportService {
       ...report,
       updatedDate: new Date().toISOString(),
     });
-    await handleDeleteCache({ asset: "report", assetId: id, userId });
+    await handleDeleteCache({ asset: "story", assetId: id, userId });
   }
 
   async replaceById(
@@ -150,7 +150,7 @@ export class ReportService {
       `ReportService - replaceById - replacing report by id ${id}`,
     );
     await this.reportRepository.replaceById(id, report);
-    await handleDeleteCache({ asset: "report", assetId: id, userId });
+    await handleDeleteCache({ asset: "story", assetId: id, userId });
   }
 
   async deleteById(
@@ -160,15 +160,12 @@ export class ReportService {
     this.logger.info(
       `ReportService - deleteById - deleting report by id ${id}`,
     );
-    this.logger.info(
-      `ReportService - deleteById - updating report by id ${id}`,
-    );
     const dbReport = await this.reportRepository.findById(id);
     if (dbReport.owner !== userId) {
       return { error: "Unauthorized" };
     }
     await this.reportRepository.deleteById(id);
-    await handleDeleteCache({ asset: "report", assetId: id, userId });
+    await handleDeleteCache({ asset: "story", assetId: id, userId });
   }
 
   async duplicate(
@@ -189,7 +186,7 @@ export class ReportService {
       owner: userId,
       settings: fReport.settings,
     });
-    await handleDeleteCache({ asset: "report", userId });
+    await handleDeleteCache({ asset: "story", userId });
     return newStory;
   }
 }
