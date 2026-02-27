@@ -19,6 +19,12 @@ export class ReportModel extends Entity {
     type: "string",
     required: false,
   })
+  nameLower: string;
+
+  @property({
+    type: "string",
+    required: false,
+  })
   description: string;
 
   @property({
