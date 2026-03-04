@@ -80,7 +80,6 @@ export class ReportService {
         "createdDate",
         "updatedDate",
         "description",
-        "title",
         "public",
         "baseline",
         "settings",
@@ -180,9 +179,8 @@ export class ReportService {
     // Duplicate Story
     const newStory = await this.reportRepository.create({
       name: `${fReport.name} (Copy)`,
-      title: fReport.title,
       description: fReport.description,
-      rows: fReport.rows,
+      items: fReport.items,
       public: false,
       baseline: false,
       owner: userId,
