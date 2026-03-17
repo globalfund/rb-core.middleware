@@ -4,8 +4,9 @@ import {
   DEFAULT_RB_CORE_MIDDLEWARE_OPTIONS,
   RbCoreMiddlewareComponentOptions,
 } from "./types";
-import { ChartModel, DatasetModel, ReportModel } from "./models";
+import { AssetModel, ChartModel, DatasetModel, ReportModel } from "./models";
 import {
+  AssetRepository,
   ChartRepository,
   DatasetRepository,
   ReportRepository,
@@ -13,6 +14,7 @@ import {
 import { createClient } from "redis";
 import { LoggerProvider } from "./providers/logger.provider";
 import { ChartService, DatasetService, ReportService } from "./services";
+import { AssetService } from "./services/asset.service";
 
 export let redisClient: ReturnType<typeof createClient>;
 
@@ -32,7 +34,7 @@ const redisConnection = async (options: RbCoreMiddlewareComponentOptions) => {
 export class RbCoreMiddlewareComponent implements Component {
   constructor(
     @config()
-    private options: RbCoreMiddlewareComponentOptions = DEFAULT_RB_CORE_MIDDLEWARE_OPTIONS
+    private options: RbCoreMiddlewareComponentOptions = DEFAULT_RB_CORE_MIDDLEWARE_OPTIONS,
   ) {
     redisConnection(this.options).catch((error) => {
       console.error("Redis Connection Error: ", error);
@@ -48,7 +50,12 @@ export class RbCoreMiddlewareComponent implements Component {
     [LOGGER_KEY.key]: LoggerProvider,
   };
 
-  models = [ChartModel, DatasetModel, ReportModel];
-  services = [ChartService, ReportService, DatasetService];
-  repositories = [ChartRepository, DatasetRepository, ReportRepository];
+  models = [ChartModel, DatasetModel, ReportModel, AssetModel];
+  services = [ChartService, ReportService, DatasetService, AssetService];
+  repositories = [
+    ChartRepository,
+    DatasetRepository,
+    ReportRepository,
+    AssetRepository,
+  ];
 }
