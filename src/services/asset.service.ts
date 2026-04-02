@@ -6,7 +6,7 @@ import {
   repository,
   Where,
 } from "@loopback/repository";
-import _ from "lodash";
+import _, { uniqueId } from "lodash";
 import { AssetRepository } from "../repositories";
 import { getCache, handleDeleteCache, setCache } from "../utils/redis";
 import { Logger } from "winston";
@@ -27,7 +27,7 @@ export class AssetService {
   ): Promise<AssetModel | { error: string; errorType: string }> {
     this.logger.info(`AssetService - create - creating a new asset`);
     asset.owner = userId;
-    await handleDeleteCache({ asset: "story", userId });
+    await handleDeleteCache({ asset: "asset", userId });
     return await this.assetRepository.create(asset);
   }
 
@@ -49,7 +49,7 @@ export class AssetService {
     }
 
     const cachedData = await getCache(
-      `stories-${userId}-${JSON.stringify(filter)}`,
+      `assets-${userId}-${JSON.stringify(filter)}`,
     );
     if (cachedData) {
       this.logger.info(`AssetService - find - Returning cached asset list`);
@@ -77,7 +77,7 @@ export class AssetService {
         "baseline",
       ],
     });
-    setCache(`stories-${userId}-${JSON.stringify(filter)}`, dataToCache);
+    setCache(`assets-${userId}-${JSON.stringify(filter)}`, dataToCache);
     return dataToCache;
   }
 
@@ -121,7 +121,7 @@ export class AssetService {
       ...asset,
       updatedDate: new Date().toISOString(),
     });
-    await handleDeleteCache({ asset: "story", assetId: id, userId });
+    await handleDeleteCache({ asset: "asset", assetId: id, userId });
   }
 
   async replaceById(
@@ -138,7 +138,7 @@ export class AssetService {
       `AssetService - replaceById - replacing asset by id ${id}`,
     );
     await this.assetRepository.replaceById(id, asset);
-    await handleDeleteCache({ asset: "story", assetId: id, userId });
+    await handleDeleteCache({ asset: "asset", assetId: id, userId });
   }
 
   async deleteById(
@@ -151,7 +151,7 @@ export class AssetService {
       return { error: "Unauthorized" };
     }
     await this.assetRepository.deleteById(id);
-    await handleDeleteCache({ asset: "story", assetId: id, userId });
+    await handleDeleteCache({ asset: "asset", assetId: id, userId });
   }
 
   async duplicate(
@@ -163,17 +163,31 @@ export class AssetService {
     );
     const fAsset = await this.assetRepository.findById(id);
     // Duplicate Asset
+
+    let data;
+
+    if (fAsset.type === "grid" || fAsset.type === "column") {
+      data = {
+        ...fAsset.data,
+        items: (fAsset.data as any)?.items?.map((item: any) => ({
+          ...item,
+          id: uniqueId(),
+        })),
+      };
+    } else {
+      data = fAsset.data;
+    }
     const newAsset = await this.assetRepository.create({
       name: `${fAsset.name} (Copy)`,
       description: fAsset.description,
       type: fAsset.type,
       options: fAsset.options,
-      data: fAsset.data,
+      data: data,
       public: false,
       baseline: false,
       owner: userId,
     });
-    await handleDeleteCache({ asset: "story", userId });
+    await handleDeleteCache({ asset: "asset", userId });
     return newAsset;
   }
 }
