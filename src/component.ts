@@ -4,16 +4,28 @@ import {
   DEFAULT_RB_CORE_MIDDLEWARE_OPTIONS,
   RbCoreMiddlewareComponentOptions,
 } from "./types";
-import { AssetModel, ChartModel, DatasetModel, ReportModel } from "./models";
+import {
+  AssetModel,
+  ChartModel,
+  DatasetModel,
+  FolderModel,
+  ReportModel,
+} from "./models";
 import {
   AssetRepository,
   ChartRepository,
   DatasetRepository,
+  FolderRepository,
   ReportRepository,
 } from "./repositories";
 import { createClient } from "redis";
 import { LoggerProvider } from "./providers/logger.provider";
-import { ChartService, DatasetService, ReportService } from "./services";
+import {
+  ChartService,
+  DatasetService,
+  FolderService,
+  ReportService,
+} from "./services";
 import { AssetService } from "./services/asset.service";
 
 export let redisClient: ReturnType<typeof createClient>;
@@ -50,12 +62,19 @@ export class RbCoreMiddlewareComponent implements Component {
     [LOGGER_KEY.key]: LoggerProvider,
   };
 
-  models = [ChartModel, DatasetModel, ReportModel, AssetModel];
-  services = [ChartService, ReportService, DatasetService, AssetService];
+  models = [ChartModel, DatasetModel, ReportModel, AssetModel, FolderModel];
+  services = [
+    ChartService,
+    ReportService,
+    DatasetService,
+    AssetService,
+    FolderService,
+  ];
   repositories = [
     ChartRepository,
     DatasetRepository,
     ReportRepository,
     AssetRepository,
+    FolderRepository,
   ];
 }
