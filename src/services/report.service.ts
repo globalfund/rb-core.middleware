@@ -10,12 +10,13 @@ import _ from "lodash";
 import {
   ChartRepository,
   DatasetRepository,
+  FolderRepository,
   ReportRepository,
 } from "../repositories";
 import { getCache, handleDeleteCache, setCache } from "../utils/redis";
 import { Logger } from "winston";
 import { LOGGER_KEY } from "../keys";
-import { ReportModel } from "../models";
+import { ReportModel, FolderModel } from "../models";
 
 export class ReportService {
   constructor(
@@ -27,6 +28,9 @@ export class ReportService {
 
     @repository(ChartRepository)
     public chartRepository: ChartRepository,
+
+    @repository(FolderRepository)
+    public folderRepository: FolderRepository,
 
     @inject(LOGGER_KEY) private logger: Logger,
   ) {}
@@ -188,5 +192,96 @@ export class ReportService {
     });
     await handleDeleteCache({ asset: "story", userId });
     return newStory;
+  }
+
+  async addToFolder(
+    userId: string,
+    reportId: string,
+    folderId: string,
+  ): Promise<void> {
+    this.logger.info(
+      `ReportService - addToFolder - adding report ${reportId} to folder ${folderId}`,
+    );
+
+    // Check if user owns the report
+    const report = await this.reportRepository.findById(reportId);
+    if (report.owner !== userId) {
+      const error = new Error("Forbidden");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+
+    // Check if user owns the folder
+    const folder = await this.folderRepository.findById(folderId);
+    if (folder.owner !== userId) {
+      const error = new Error("Forbidden");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+
+    // Add report to folder using the many-to-many relationship
+    const folderReports = await this.reportRepository.folders(reportId);
+    await folderReports.link(folderId);
+
+    // Invalidate cache
+    await handleDeleteCache({ asset: "story", assetId: reportId, userId });
+  }
+
+  async removeFromFolder(
+    userId: string,
+    reportId: string,
+    folderId: string,
+  ): Promise<void> {
+    this.logger.info(
+      `ReportService - removeFromFolder - removing report ${reportId} from folder ${folderId}`,
+    );
+
+    // Check if user owns the report
+    const report = await this.reportRepository.findById(reportId);
+    if (report.owner !== userId) {
+      const error = new Error("Forbidden");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+
+    // Check if user owns the folder
+    const folder = await this.folderRepository.findById(folderId);
+    if (folder.owner !== userId) {
+      const error = new Error("Forbidden");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+
+    // Remove report from folder using the many-to-many relationship
+    const folderReports = await this.reportRepository.folders(reportId);
+    await folderReports.unlink(folderId);
+
+    // Invalidate cache
+    await handleDeleteCache({ asset: "story", assetId: reportId, userId });
+  }
+
+  async getFolders(
+    userId: string,
+    reportId: string,
+  ): Promise<FolderModel[]> {
+    this.logger.info(
+      `ReportService - getFolders - getting folders for report ${reportId}`,
+    );
+
+    // Check if user owns the report or if it's public/baseline
+    const report = await this.reportRepository.findById(reportId);
+    if (
+      !report.public &&
+      !report.baseline &&
+      report.owner !== userId
+    ) {
+      const error = new Error("Forbidden");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+
+    // Get all folders containing this report
+    const folderReports = await this.reportRepository.folders(reportId);
+    return await folderReports.find();
   }
 }

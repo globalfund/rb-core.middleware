@@ -9,6 +9,8 @@ import {
   ChartModel,
   DatasetModel,
   FolderModel,
+  FolderAssetModel,
+  FolderReportModel,
   ReportModel,
 } from "./models";
 import {
@@ -16,6 +18,8 @@ import {
   ChartRepository,
   DatasetRepository,
   FolderRepository,
+  FolderAssetRepository,
+  FolderReportRepository,
   ReportRepository,
 } from "./repositories";
 import { createClient } from "redis";
@@ -62,7 +66,7 @@ export class RbCoreMiddlewareComponent implements Component {
     [LOGGER_KEY.key]: LoggerProvider,
   };
 
-  models = [ChartModel, DatasetModel, ReportModel, AssetModel, FolderModel];
+  models = [ChartModel, DatasetModel, ReportModel, AssetModel, FolderModel, FolderAssetModel, FolderReportModel];
   services = [
     ChartService,
     ReportService,
@@ -76,5 +80,7 @@ export class RbCoreMiddlewareComponent implements Component {
     ReportRepository,
     AssetRepository,
     FolderRepository,
+    FolderAssetRepository,
+    FolderReportRepository,
   ];
 }

@@ -1,4 +1,6 @@
-import { Entity, model, property } from "@loopback/repository";
+import { Entity, model, property, hasMany } from "@loopback/repository";
+import { FolderModel } from "./folder.model";
+import { FolderAssetModel } from "./folder-asset.model";
 
 @model({ settings: { strict: false, forceId: true } })
 export class AssetModel extends Entity {
@@ -74,6 +76,15 @@ export class AssetModel extends Entity {
   })
   updatedDate: string;
 
+  @hasMany(() => FolderModel, {
+    through: {
+      model: () => FolderAssetModel,
+      keyFrom: "assetId",
+      keyTo: "folderId",
+    },
+  })
+  folders: FolderModel[];
+
   constructor(data?: Partial<AssetModel>) {
     super(data);
   }
@@ -81,6 +92,7 @@ export class AssetModel extends Entity {
 
 export interface AssetModelRelations {
   // describe navigational properties here
+  folders?: FolderModel[];
 }
 
 export type AssetModelWithRelations = AssetModel & AssetModelRelations;
