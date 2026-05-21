@@ -58,17 +58,17 @@ export class FolderService {
       filter.order = filter.order.replace("name", "nameLower");
     }
 
-    const cachedData = await getCache(
-      `folders-${userId}-${JSON.stringify(filter)}`,
-    );
-    if (cachedData) {
-      this.logger.info(`FolderService - find - Returning cached folder list`);
-      return cachedData;
-    }
+    // const cachedData = await getCache(
+    //   `folders-${userId}-${JSON.stringify(filter)}`,
+    // );
+    // if (cachedData) {
+    //   this.logger.info(`FolderService - find - Returning cached folder list`);
+    //   return cachedData;
+    // }
 
     this.logger.info(`FolderService - find - Fetching folders`);
 
-    const dataToCache = await this.folderRepository.find({
+    const findFilter = {
       ...filter,
       where: {
         ...filter?.where,
@@ -81,20 +81,59 @@ export class FolderService {
         "updatedDate",
         "public",
         "owner",
-        "assets",
-        "reports",
+        "parentId",
       ],
-      include: [
-        {
-          relation: "assets",
-          scope: { fields: ["id"] },
-        },
-        {
-          relation: "reports",
-          scope: { fields: ["id"] },
-        },
-      ],
+    };
+    const folders = await this.folderRepository.find(findFilter as any);
+    const folderIds = folders.map((f) => f.id);
+
+    const [assets, reports, childFolders] = await Promise.all([
+      this.assetRepository.find({
+        where: { folderId: { inq: folderIds } },
+        fields: ["id", "name", "folderId"],
+      }),
+      this.reportRepository.find({
+        where: { folderId: { inq: folderIds } },
+        fields: ["id", "name", "folderId"],
+      }),
+      this.folderRepository.find({
+        where: { parentId: { inq: folderIds } },
+        fields: ["id", "name", "parentId"],
+      }),
+    ]);
+
+    const assetsByFolder: { [key: string]: AssetModel[] } = {};
+    assets.forEach((a) => {
+      const fid = (a as any).folderId;
+      if (!fid) return;
+      if (!assetsByFolder[fid]) assetsByFolder[fid] = [];
+      assetsByFolder[fid].push(a);
     });
+
+    const reportsByFolder: { [key: string]: ReportModel[] } = {};
+    reports.forEach((r) => {
+      const fid = (r as any).folderId;
+      if (!fid) return;
+      if (!reportsByFolder[fid]) reportsByFolder[fid] = [];
+      reportsByFolder[fid].push(r);
+    });
+
+    const childrenByFolder: { [key: string]: FolderModel[] } = {};
+    childFolders.forEach((c) => {
+      const pid = (c as any).parentId;
+      if (!pid) return;
+      if (!childrenByFolder[pid]) childrenByFolder[pid] = [];
+      childrenByFolder[pid].push(c);
+    });
+
+    const dataToCache = folders.map((f) => {
+      const obj = (f as any).toJSON ? (f as any).toJSON() : { ...f };
+      obj.assets = assetsByFolder[f.id] || [];
+      obj.reports = reportsByFolder[f.id] || [];
+      obj.children = childrenByFolder[f.id] || [];
+      return obj;
+    });
+
     setCache(`folders-${userId}-${JSON.stringify(filter)}`, dataToCache);
     return dataToCache;
   }
@@ -122,35 +161,86 @@ export class FolderService {
         "updatedDate",
         "public",
         "owner",
-        "assets",
-        "reports",
-      ],
-      include: [
-        {
-          relation: "assets",
-          scope: { fields: ["id"] },
-        },
-        {
-          relation: "reports",
-          scope: {
-            fields: [
-              "id",
-              "name",
-              "description",
-              "public",
-              "owner",
-              "createdDate",
-              "updatedDate",
-            ],
-          },
-        },
+        "parentId",
       ],
     });
-    if (folder.public || userIds.indexOf(_.get(folder, "owner", "")) !== -1) {
-      return folder;
+    if (
+      !(folder.public || userIds.indexOf(_.get(folder, "owner", "")) !== -1)
+    ) {
+      this.logger.info(`FolderService - findById - unauthorized`);
+      return { error: "Unauthorized", name: folder.name } as any;
     }
-    this.logger.info(`FolderService - findById - unauthorized`);
-    return { error: "Unauthorized", name: folder.name };
+
+    const [assets, reports, children] = await Promise.all([
+      this.assetRepository.find({
+        where: { folderId: id },
+        fields: ["id", "name"],
+      }),
+      this.reportRepository.find({
+        where: { folderId: id },
+        fields: [
+          "id",
+          "name",
+          "description",
+          "public",
+          "owner",
+          "createdDate",
+          "updatedDate",
+          "folderId",
+        ],
+        include: [
+          {
+            relation: "folder",
+            scope: {
+              fields: ["id", "name"],
+              include: [
+                {
+                  relation: "parent",
+                  scope: {
+                    fields: ["id", "name"],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      this.find(userIds[0], { where: { parentId: id } }),
+    ]);
+
+    const obj: any = (folder as any).toJSON
+      ? (folder as any).toJSON()
+      : { ...folder };
+    obj.assets = assets;
+    obj.reports = reports;
+    obj.children = children;
+
+    // inject locationPath field to be used in frontend for breadcrumbs for assets, reports, and child folders
+    const injectLocationPath = (item: any, parentPath: string = "") => {
+      const currentPath = parentPath
+        ? `${parentPath} > ${item.name}`
+        : item.name;
+      item.locationPath = currentPath;
+      if (item.assets) {
+        item.assets.forEach((asset: any) => {
+          asset.locationPath = currentPath;
+        });
+      }
+      if (item.reports) {
+        item.reports.forEach((report: any) => {
+          report.locationPath = currentPath;
+        });
+      }
+      if (item.children) {
+        item.children.forEach((child: any) => {
+          child.locationPath = currentPath;
+        });
+      }
+    };
+
+    injectLocationPath(obj, "My Workspace");
+
+    return obj;
   }
 
   async updateById(
@@ -305,8 +395,11 @@ export class FolderService {
       };
     }
 
-    // Add asset to folder using the relationship accessor
-    await (await this.folderRepository.assets(folderId)).link(assetId);
+    // Set the asset's folderId
+    await this.assetRepository.updateById(assetId, {
+      folderId,
+      updatedDate: new Date().toISOString(),
+    });
 
     // Invalidate cache
     await handleDeleteCache({ asset: "folder", assetId: folderId, userId });
@@ -331,8 +424,14 @@ export class FolderService {
       };
     }
 
-    // Remove asset from folder using the relationship accessor
-    await (await this.folderRepository.assets(folderId)).unlink(assetId);
+    // Remove asset from folder by clearing its folderId (only if it matches)
+    const asset = await this.assetRepository.findById(assetId);
+    if (asset.folderId === folderId) {
+      await this.assetRepository.updateById(assetId, {
+        folderId: undefined,
+        updatedDate: new Date().toISOString(),
+      });
+    }
 
     // Invalidate cache
     await handleDeleteCache({ asset: "folder", assetId: folderId, userId });
@@ -363,10 +462,27 @@ export class FolderService {
     userId: string,
     folderId: string,
     reportId: string,
+    reportPrevFolderId?: string,
   ): Promise<FolderModel | { error: string; errorType: string }> {
     this.logger.info(
       `FolderService - addReport - adding report ${reportId} to folder ${folderId}`,
     );
+
+    if (folderId === "__root__") {
+      await this.reportRepository.updateById(reportId, {
+        folderId: undefined,
+        updatedDate: new Date().toISOString(),
+      });
+      await handleDeleteCache({ asset: "stories", userId });
+      if (reportPrevFolderId) {
+        await handleDeleteCache({
+          userId,
+          asset: "folder",
+          assetId: reportPrevFolderId,
+        });
+      }
+      return { id: "__root__", name: "My Workspace" } as FolderModel;
+    }
 
     // Check if user owns the folder
     const folder = await this.folderRepository.findById(folderId);
@@ -386,11 +502,21 @@ export class FolderService {
       };
     }
 
-    // Add report to folder using the relationship accessor
-    await (await this.folderRepository.reports(folderId)).link(reportId);
+    // Set the report's folderId
+    await this.reportRepository.updateById(reportId, {
+      folderId,
+      updatedDate: new Date().toISOString(),
+    });
 
     // Invalidate cache
     await handleDeleteCache({ asset: "folder", assetId: folderId, userId });
+    if (reportPrevFolderId) {
+      await handleDeleteCache({
+        asset: "folder",
+        assetId: reportPrevFolderId,
+        userId,
+      });
+    }
     return folder;
   }
 
@@ -412,11 +538,83 @@ export class FolderService {
       };
     }
 
-    // Remove report from folder using the relationship accessor
-    await (await this.folderRepository.reports(folderId)).unlink(reportId);
+    // Remove report from folder by clearing its folderId (only if it matches)
+    const report = await this.reportRepository.findById(reportId);
+    if (report.folderId === folderId) {
+      await this.reportRepository.updateById(reportId, {
+        folderId: undefined,
+        updatedDate: new Date().toISOString(),
+      });
+    }
 
     // Invalidate cache
     await handleDeleteCache({ asset: "folder", assetId: folderId, userId });
+    return folder;
+  }
+
+  async addFolder(
+    userId: string,
+    parentFolderId: string,
+    folderItemId: string,
+    folderPrevFolderId?: string,
+  ): Promise<FolderModel | { error: string; errorType: string }> {
+    this.logger.info(
+      `FolderService - addFolder - adding folder ${folderItemId} to folder ${parentFolderId}`,
+    );
+
+    if (parentFolderId === "__root__") {
+      await this.folderRepository.updateById(folderItemId, {
+        parentId: undefined,
+        updatedDate: new Date().toISOString(),
+      });
+      await handleDeleteCache({ asset: "folders", userId });
+      if (folderPrevFolderId) {
+        await handleDeleteCache({
+          userId,
+          asset: "folder",
+          assetId: folderPrevFolderId,
+        });
+      }
+      return { id: "__root__", name: "My Workspace" } as FolderModel;
+    }
+
+    // Check if user owns the folder
+    const folder = await this.folderRepository.findById(parentFolderId);
+    if (folder.owner !== userId) {
+      throw {
+        statusCode: 403,
+        message: "Forbidden: You do not own this folder",
+      };
+    }
+
+    // Check if user owns the folder or if folder is public/baseline
+    const folderItem = await this.folderRepository.findById(folderItemId);
+    if (folderItem.owner !== userId && !folderItem.public) {
+      throw {
+        statusCode: 403,
+        message: "Forbidden: You do not have access to this folder",
+      };
+    }
+
+    // Set the folder's parentId
+    await this.folderRepository.updateById(folderItemId, {
+      parentId: parentFolderId,
+      updatedDate: new Date().toISOString(),
+    });
+
+    // Invalidate cache
+    await handleDeleteCache({
+      asset: "folder",
+      assetId: parentFolderId,
+      userId,
+    });
+    if (folderPrevFolderId) {
+      await handleDeleteCache({
+        asset: "folder",
+        assetId: folderPrevFolderId,
+        userId,
+      });
+    }
     return folder;
   }
 

@@ -62,13 +62,13 @@ export class ReportService {
       filter.order = filter.order.replace("name", "nameLower");
     }
 
-    const cachedData = await getCache(
-      `stories-${userId}-${JSON.stringify(filter)}`,
-    );
-    if (cachedData) {
-      this.logger.info(`ReportService - find - Returning cached report list`);
-      return cachedData;
-    }
+    // const cachedData = await getCache(
+    //   `stories-${userId}-${JSON.stringify(filter)}`,
+    // );
+    // if (cachedData) {
+    //   this.logger.info(`ReportService - find - Returning cached report list`);
+    //   return cachedData;
+    // }
 
     this.logger.info(`ReportService - find - Fetching reports`);
 
@@ -87,6 +87,23 @@ export class ReportService {
         "public",
         "baseline",
         "settings",
+        "folderId",
+      ],
+      include: [
+        {
+          relation: "folder",
+          scope: {
+            fields: ["id", "name"],
+            include: [
+              {
+                relation: "parent",
+                scope: {
+                  fields: ["id", "name"],
+                },
+              },
+            ],
+          },
+        },
       ],
     });
     setCache(`stories-${userId}-${JSON.stringify(filter)}`, dataToCache);
@@ -219,9 +236,11 @@ export class ReportService {
       throw error;
     }
 
-    // Add report to folder using the many-to-many relationship
-    const folderReports = await this.reportRepository.folders(reportId);
-    await folderReports.link(folderId);
+    // Set the report's folderId
+    await this.reportRepository.updateById(reportId, {
+      folderId,
+      updatedDate: new Date().toISOString(),
+    });
 
     // Invalidate cache
     await handleDeleteCache({ asset: "story", assetId: reportId, userId });
@@ -252,36 +271,40 @@ export class ReportService {
       throw error;
     }
 
-    // Remove report from folder using the many-to-many relationship
-    const folderReports = await this.reportRepository.folders(reportId);
-    await folderReports.unlink(folderId);
+    // Only unset if it's actually in the given folder
+    if (report.folderId !== folderId) {
+      return;
+    }
+
+    await this.reportRepository.updateById(reportId, {
+      folderId: undefined,
+      updatedDate: new Date().toISOString(),
+    });
 
     // Invalidate cache
     await handleDeleteCache({ asset: "story", assetId: reportId, userId });
   }
 
-  async getFolders(
+  async getFolder(
     userId: string,
     reportId: string,
-  ): Promise<FolderModel[]> {
+  ): Promise<FolderModel | null> {
     this.logger.info(
-      `ReportService - getFolders - getting folders for report ${reportId}`,
+      `ReportService - getFolder - getting folder for report ${reportId}`,
     );
 
     // Check if user owns the report or if it's public/baseline
     const report = await this.reportRepository.findById(reportId);
-    if (
-      !report.public &&
-      !report.baseline &&
-      report.owner !== userId
-    ) {
+    if (!report.public && !report.baseline && report.owner !== userId) {
       const error = new Error("Forbidden");
       (error as any).statusCode = 403;
       throw error;
     }
 
-    // Get all folders containing this report
-    const folderReports = await this.reportRepository.folders(reportId);
-    return await folderReports.find();
+    if (!report.folderId) {
+      return null;
+    }
+
+    return await this.reportRepository.folder(reportId);
   }
 }

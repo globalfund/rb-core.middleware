@@ -7,8 +7,6 @@ import {
 } from "@loopback/repository";
 import { AssetModel } from "./asset.model";
 import { ReportModel } from "./report.model";
-import { FolderAssetModel } from "./folder-asset.model";
-import { FolderReportModel } from "./folder-report.model";
 
 @model({ settings: { strict: false, forceId: true } })
 export class FolderModel extends Entity {
@@ -54,22 +52,10 @@ export class FolderModel extends Entity {
   })
   updatedDate: string;
 
-  @hasMany(() => AssetModel, {
-    through: {
-      model: () => FolderAssetModel,
-      keyFrom: "folderId",
-      keyTo: "assetId",
-    },
-  })
+  @hasMany(() => AssetModel, { keyTo: "folderId" })
   assets: AssetModel[];
 
-  @hasMany(() => ReportModel, {
-    through: {
-      model: () => FolderReportModel,
-      keyFrom: "folderId",
-      keyTo: "reportId",
-    },
-  })
+  @hasMany(() => ReportModel, { keyTo: "folderId" })
   reports: ReportModel[];
 
   @belongsTo(() => FolderModel)

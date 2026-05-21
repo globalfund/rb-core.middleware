@@ -78,6 +78,7 @@ export class AssetService {
         "updatedDate",
         "public",
         "baseline",
+        "folderId",
       ],
     });
     setCache(`assets-${userId}-${JSON.stringify(filter)}`, dataToCache);
@@ -221,8 +222,11 @@ export class AssetService {
       return { error: "Forbidden" };
     }
 
-    // Add asset to folder using the many-to-many relationship
-    await (await this.assetRepository.folders(assetId)).link(folderId);
+    // Set the asset's folderId
+    await this.assetRepository.updateById(assetId, {
+      folderId,
+      updatedDate: new Date().toISOString(),
+    });
 
     // Invalidate cache
     await handleDeleteCache({ asset: "asset", assetId, userId });
@@ -255,19 +259,26 @@ export class AssetService {
       return { error: "Forbidden" };
     }
 
-    // Remove asset from folder using the many-to-many relationship
-    await (await this.assetRepository.folders(assetId)).unlink(folderId);
+    // Only unset if the asset is actually in the given folder
+    if (asset.folderId !== folderId) {
+      return;
+    }
+
+    await this.assetRepository.updateById(assetId, {
+      folderId: undefined,
+      updatedDate: new Date().toISOString(),
+    });
 
     // Invalidate cache
     await handleDeleteCache({ asset: "asset", assetId, userId });
   }
 
-  async getFolders(
+  async getFolder(
     userId: string,
     assetId: string,
-  ): Promise<FolderModel[] | { error: string }> {
+  ): Promise<FolderModel | null | { error: string }> {
     this.logger.info(
-      `AssetService - getFolders - getting folders for asset ${assetId}`,
+      `AssetService - getFolder - getting folder for asset ${assetId}`,
     );
 
     // Check if user owns the asset or if it's public/baseline
@@ -278,15 +289,19 @@ export class AssetService {
       asset.owner !== userId
     ) {
       this.logger.info(
-        `AssetService - getFolders - user does not have access to asset ${assetId}`,
+        `AssetService - getFolder - user does not have access to asset ${assetId}`,
       );
       return { error: "Forbidden" };
     }
 
-    // Get all folders containing this asset
-    const folders = await (await this.assetRepository.folders(assetId)).find();
+    if (!asset.folderId) {
+      return null;
+    }
 
-    // Filter folders to only return those owned by the user
-    return folders.filter((folder) => folder.owner === userId);
+    const folder = await this.assetRepository.folder(assetId);
+    if (folder.owner !== userId) {
+      return null;
+    }
+    return folder;
   }
 }

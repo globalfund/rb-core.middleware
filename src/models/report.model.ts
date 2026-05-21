@@ -1,6 +1,5 @@
-import { Entity, model, property, hasMany } from "@loopback/repository";
+import { Entity, model, property, belongsTo } from "@loopback/repository";
 import { FolderModel } from "./folder.model";
-import { FolderReportModel } from "./folder-report.model";
 
 @model({ settings: { strict: false, forceId: true } })
 export class ReportModel extends Entity {
@@ -78,14 +77,8 @@ export class ReportModel extends Entity {
   })
   settings: object;
 
-  @hasMany(() => FolderModel, {
-    through: {
-      model: () => FolderReportModel,
-      keyFrom: "reportId",
-      keyTo: "folderId",
-    },
-  })
-  folders: FolderModel[];
+  @belongsTo(() => FolderModel)
+  folderId?: string;
 
   constructor(data?: Partial<ReportModel>) {
     super(data);
@@ -94,7 +87,7 @@ export class ReportModel extends Entity {
 
 export interface ReportModelRelations {
   // describe navigational properties here
-  folders?: FolderModel[];
+  folder?: FolderModel;
 }
 
 export type ReportModelWithRelations = ReportModel & ReportModelRelations;

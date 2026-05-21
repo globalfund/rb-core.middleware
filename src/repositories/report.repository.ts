@@ -1,36 +1,27 @@
 import { inject, Getter } from "@loopback/core";
-import { ReportModel, FolderModel, FolderReportModel } from "../models";
-import { DefaultCrudRepository, juggler, repository, HasManyThroughRepositoryFactory } from "@loopback/repository";
+import { ReportModel, FolderModel } from "../models";
+import { DefaultCrudRepository, juggler, repository, BelongsToAccessor } from "@loopback/repository";
 import { FolderRepository } from "./folder.repository";
-import { FolderReportRepository } from "./folder-report.repository";
 
 export class ReportRepository extends DefaultCrudRepository<
   ReportModel,
   typeof ReportModel.prototype.id
 > {
-  public folders: HasManyThroughRepositoryFactory<
-    FolderModel,
-    typeof FolderModel.prototype.id,
-    FolderReportModel,
-    typeof ReportModel.prototype.id
-  >;
+  public folder: BelongsToAccessor<FolderModel, typeof ReportModel.prototype.id>;
 
   constructor(
     @inject("datasources.db") dataSource: juggler.DataSource,
     @repository.getter("FolderRepository")
     protected folderRepositoryGetter: Getter<FolderRepository>,
-    @repository.getter("FolderReportRepository")
-    protected folderReportRepositoryGetter: Getter<FolderReportRepository>
   ) {
     super(ReportModel, dataSource);
 
-    this.folders = this.createHasManyThroughRepositoryFactoryFor(
-      "folders",
+    this.folder = this.createBelongsToAccessorFor(
+      "folder",
       folderRepositoryGetter,
-      folderReportRepositoryGetter
     );
 
-    this.registerInclusionResolver('folders', this.folders.inclusionResolver);
+    this.registerInclusionResolver('folder', this.folder.inclusionResolver);
 
     this.modelClass.observe("before save", this.beforeSave);
   }
