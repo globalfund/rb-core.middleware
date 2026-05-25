@@ -7,16 +7,19 @@ import {
   Where,
 } from "@loopback/repository";
 import _, { uniqueId } from "lodash";
-import { AssetRepository } from "../repositories";
+import { AssetRepository, FolderRepository } from "../repositories";
 import { getCache, handleDeleteCache, setCache } from "../utils/redis";
 import { Logger } from "winston";
 import { LOGGER_KEY } from "../keys";
-import { AssetModel } from "../models";
+import { AssetModel, FolderModel } from "../models";
 
 export class AssetService {
   constructor(
     @repository(AssetRepository)
     public assetRepository: AssetRepository,
+
+    @repository(FolderRepository)
+    public folderRepository: FolderRepository,
 
     @inject(LOGGER_KEY) private logger: Logger,
   ) {}
@@ -75,6 +78,7 @@ export class AssetService {
         "updatedDate",
         "public",
         "baseline",
+        "folderId",
       ],
     });
     setCache(`assets-${userId}-${JSON.stringify(filter)}`, dataToCache);
@@ -189,5 +193,115 @@ export class AssetService {
     });
     await handleDeleteCache({ asset: "asset", userId });
     return newAsset;
+  }
+
+  async addToFolder(
+    userId: string,
+    assetId: string,
+    folderId: string,
+  ): Promise<void | { error: string }> {
+    this.logger.info(
+      `AssetService - addToFolder - adding asset ${assetId} to folder ${folderId}`,
+    );
+
+    // Check if user owns the asset
+    const asset = await this.assetRepository.findById(assetId);
+    if (asset.owner !== userId) {
+      this.logger.info(
+        `AssetService - addToFolder - user does not own asset ${assetId}`,
+      );
+      return { error: "Forbidden" };
+    }
+
+    // Check if user owns the folder
+    const folder = await this.folderRepository.findById(folderId);
+    if (folder.owner !== userId) {
+      this.logger.info(
+        `AssetService - addToFolder - user does not own folder ${folderId}`,
+      );
+      return { error: "Forbidden" };
+    }
+
+    // Set the asset's folderId
+    await this.assetRepository.updateById(assetId, {
+      folderId,
+      updatedDate: new Date().toISOString(),
+    });
+
+    // Invalidate cache
+    await handleDeleteCache({ asset: "asset", assetId, userId });
+  }
+
+  async removeFromFolder(
+    userId: string,
+    assetId: string,
+    folderId: string,
+  ): Promise<void | { error: string }> {
+    this.logger.info(
+      `AssetService - removeFromFolder - removing asset ${assetId} from folder ${folderId}`,
+    );
+
+    // Check if user owns the asset
+    const asset = await this.assetRepository.findById(assetId);
+    if (asset.owner !== userId) {
+      this.logger.info(
+        `AssetService - removeFromFolder - user does not own asset ${assetId}`,
+      );
+      return { error: "Forbidden" };
+    }
+
+    // Check if user owns the folder
+    const folder = await this.folderRepository.findById(folderId);
+    if (folder.owner !== userId) {
+      this.logger.info(
+        `AssetService - removeFromFolder - user does not own folder ${folderId}`,
+      );
+      return { error: "Forbidden" };
+    }
+
+    // Only unset if the asset is actually in the given folder
+    if (asset.folderId !== folderId) {
+      return;
+    }
+
+    await this.assetRepository.updateById(assetId, {
+      folderId: undefined,
+      updatedDate: new Date().toISOString(),
+    });
+
+    // Invalidate cache
+    await handleDeleteCache({ asset: "asset", assetId, userId });
+  }
+
+  async getFolder(
+    userId: string,
+    assetId: string,
+  ): Promise<FolderModel | null | { error: string }> {
+    this.logger.info(
+      `AssetService - getFolder - getting folder for asset ${assetId}`,
+    );
+
+    // Check if user owns the asset or if it's public/baseline
+    const asset = await this.assetRepository.findById(assetId);
+    if (
+      !asset.public &&
+      !asset.baseline &&
+      asset.owner !== userId
+    ) {
+      this.logger.info(
+        `AssetService - getFolder - user does not have access to asset ${assetId}`,
+      );
+      return { error: "Forbidden" };
+    }
+
+    if (!asset.folderId) {
+      return null;
+    }
+
+    const folder = await this.assetRepository.folder(assetId);
+    if (folder.owner !== userId) {
+      return null;
+    }
+    return folder;
   }
 }

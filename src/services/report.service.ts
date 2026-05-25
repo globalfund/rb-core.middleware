@@ -10,12 +10,13 @@ import _ from "lodash";
 import {
   ChartRepository,
   DatasetRepository,
+  FolderRepository,
   ReportRepository,
 } from "../repositories";
 import { getCache, handleDeleteCache, setCache } from "../utils/redis";
 import { Logger } from "winston";
 import { LOGGER_KEY } from "../keys";
-import { ReportModel } from "../models";
+import { ReportModel, FolderModel } from "../models";
 
 export class ReportService {
   constructor(
@@ -27,6 +28,9 @@ export class ReportService {
 
     @repository(ChartRepository)
     public chartRepository: ChartRepository,
+
+    @repository(FolderRepository)
+    public folderRepository: FolderRepository,
 
     @inject(LOGGER_KEY) private logger: Logger,
   ) {}
@@ -58,13 +62,13 @@ export class ReportService {
       filter.order = filter.order.replace("name", "nameLower");
     }
 
-    const cachedData = await getCache(
-      `stories-${userId}-${JSON.stringify(filter)}`,
-    );
-    if (cachedData) {
-      this.logger.info(`ReportService - find - Returning cached report list`);
-      return cachedData;
-    }
+    // const cachedData = await getCache(
+    //   `stories-${userId}-${JSON.stringify(filter)}`,
+    // );
+    // if (cachedData) {
+    //   this.logger.info(`ReportService - find - Returning cached report list`);
+    //   return cachedData;
+    // }
 
     this.logger.info(`ReportService - find - Fetching reports`);
 
@@ -83,6 +87,23 @@ export class ReportService {
         "public",
         "baseline",
         "settings",
+        "folderId",
+      ],
+      include: [
+        {
+          relation: "folder",
+          scope: {
+            fields: ["id", "name"],
+            include: [
+              {
+                relation: "parent",
+                scope: {
+                  fields: ["id", "name"],
+                },
+              },
+            ],
+          },
+        },
       ],
     });
     setCache(`stories-${userId}-${JSON.stringify(filter)}`, dataToCache);
@@ -188,5 +209,102 @@ export class ReportService {
     });
     await handleDeleteCache({ asset: "story", userId });
     return newStory;
+  }
+
+  async addToFolder(
+    userId: string,
+    reportId: string,
+    folderId: string,
+  ): Promise<void> {
+    this.logger.info(
+      `ReportService - addToFolder - adding report ${reportId} to folder ${folderId}`,
+    );
+
+    // Check if user owns the report
+    const report = await this.reportRepository.findById(reportId);
+    if (report.owner !== userId) {
+      const error = new Error("Forbidden");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+
+    // Check if user owns the folder
+    const folder = await this.folderRepository.findById(folderId);
+    if (folder.owner !== userId) {
+      const error = new Error("Forbidden");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+
+    // Set the report's folderId
+    await this.reportRepository.updateById(reportId, {
+      folderId,
+      updatedDate: new Date().toISOString(),
+    });
+
+    // Invalidate cache
+    await handleDeleteCache({ asset: "story", assetId: reportId, userId });
+  }
+
+  async removeFromFolder(
+    userId: string,
+    reportId: string,
+    folderId: string,
+  ): Promise<void> {
+    this.logger.info(
+      `ReportService - removeFromFolder - removing report ${reportId} from folder ${folderId}`,
+    );
+
+    // Check if user owns the report
+    const report = await this.reportRepository.findById(reportId);
+    if (report.owner !== userId) {
+      const error = new Error("Forbidden");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+
+    // Check if user owns the folder
+    const folder = await this.folderRepository.findById(folderId);
+    if (folder.owner !== userId) {
+      const error = new Error("Forbidden");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+
+    // Only unset if it's actually in the given folder
+    if (report.folderId !== folderId) {
+      return;
+    }
+
+    await this.reportRepository.updateById(reportId, {
+      folderId: undefined,
+      updatedDate: new Date().toISOString(),
+    });
+
+    // Invalidate cache
+    await handleDeleteCache({ asset: "story", assetId: reportId, userId });
+  }
+
+  async getFolder(
+    userId: string,
+    reportId: string,
+  ): Promise<FolderModel | null> {
+    this.logger.info(
+      `ReportService - getFolder - getting folder for report ${reportId}`,
+    );
+
+    // Check if user owns the report or if it's public/baseline
+    const report = await this.reportRepository.findById(reportId);
+    if (!report.public && !report.baseline && report.owner !== userId) {
+      const error = new Error("Forbidden");
+      (error as any).statusCode = 403;
+      throw error;
+    }
+
+    if (!report.folderId) {
+      return null;
+    }
+
+    return await this.reportRepository.folder(reportId);
   }
 }

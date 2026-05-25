@@ -1,4 +1,5 @@
-import { Entity, model, property } from "@loopback/repository";
+import { Entity, model, property, belongsTo } from "@loopback/repository";
+import { FolderModel } from "./folder.model";
 
 @model({ settings: { strict: false, forceId: true } })
 export class AssetModel extends Entity {
@@ -74,6 +75,9 @@ export class AssetModel extends Entity {
   })
   updatedDate: string;
 
+  @belongsTo(() => FolderModel)
+  folderId?: string;
+
   constructor(data?: Partial<AssetModel>) {
     super(data);
   }
@@ -81,6 +85,7 @@ export class AssetModel extends Entity {
 
 export interface AssetModelRelations {
   // describe navigational properties here
+  folder?: FolderModel;
 }
 
 export type AssetModelWithRelations = AssetModel & AssetModelRelations;
