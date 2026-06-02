@@ -82,6 +82,7 @@ export class FolderService {
         "public",
         "owner",
         "parentId",
+        "type",
       ],
     };
     const folders = await this.folderRepository.find(findFilter as any);
@@ -309,6 +310,7 @@ export class FolderService {
       name: `${fFolder.name} (Copy)`,
       public: false,
       owner: userId,
+      type: fFolder.type,
     });
     await handleDeleteCache({ asset: "folder", userId });
     return newFolder;
