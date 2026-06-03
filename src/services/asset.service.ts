@@ -51,13 +51,13 @@ export class AssetService {
       filter.order = filter.order.replace("name", "nameLower");
     }
 
-    const cachedData = await getCache(
-      `assets-${userId}-${JSON.stringify(filter)}`,
-    );
-    if (cachedData) {
-      this.logger.info(`AssetService - find - Returning cached asset list`);
-      return cachedData;
-    }
+    // const cachedData = await getCache(
+    //   `assets-${userId}-${JSON.stringify(filter)}`,
+    // );
+    // if (cachedData) {
+    //   this.logger.info(`AssetService - find - Returning cached asset list`);
+    //   return cachedData;
+    // }
 
     this.logger.info(`AssetService - find - Fetching assets`);
 
@@ -283,11 +283,7 @@ export class AssetService {
 
     // Check if user owns the asset or if it's public/baseline
     const asset = await this.assetRepository.findById(assetId);
-    if (
-      !asset.public &&
-      !asset.baseline &&
-      asset.owner !== userId
-    ) {
+    if (!asset.public && !asset.baseline && asset.owner !== userId) {
       this.logger.info(
         `AssetService - getFolder - user does not have access to asset ${assetId}`,
       );
