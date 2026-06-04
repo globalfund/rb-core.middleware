@@ -82,6 +82,7 @@ export class FolderService {
         "public",
         "owner",
         "parentId",
+        "type",
       ],
     };
     const folders = await this.folderRepository.find(findFilter as any);
@@ -174,7 +175,17 @@ export class FolderService {
     const [assets, reports, children] = await Promise.all([
       this.assetRepository.find({
         where: { folderId: id },
-        fields: ["id", "name"],
+        fields: [
+          "id",
+          "name",
+          "description",
+          "public",
+          "owner",
+          "createdDate",
+          "updatedDate",
+          "folderId",
+          "type",
+        ],
       }),
       this.reportRepository.find({
         where: { folderId: id },
@@ -309,6 +320,7 @@ export class FolderService {
       name: `${fFolder.name} (Copy)`,
       public: false,
       owner: userId,
+      type: fFolder.type,
     });
     await handleDeleteCache({ asset: "folder", userId });
     return newFolder;

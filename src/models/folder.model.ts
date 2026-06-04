@@ -37,6 +37,12 @@ export class FolderModel extends Entity {
 
   @property({
     type: "string",
+    default: "report",
+  })
+  type: "report" | "asset";
+
+  @property({
+    type: "string",
   })
   owner: string;
 
