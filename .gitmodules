@@ -1,0 +1,3 @@
+[submodule "src/utils/renderChart/rb-core.charts"]
+	path = src/utils/renderChart/rb-core.charts
+	url = https://github.com/globalfund/rb-core.charts

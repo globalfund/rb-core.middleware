@@ -24,7 +24,7 @@ import {
   echartsStackedBarchart,
   echartsSunburst,
   echartsTreemap,
-} from "./rawgraphs-charts/lib/index.cjs.js";
+} from "./rb-core.charts/lib/index.cjs.js";
 
 import { winstonLogger } from "./winston-logger.js";
 
@@ -64,7 +64,7 @@ function getDatasetFilterOptions(dataset, dataTypes, onlyKeys, appliedFilters) {
       !key.toLowerCase().includes("amount") &&
       !key.toLowerCase().includes("date") &&
       !key.toLowerCase().includes("number") &&
-      !key.toLowerCase().includes("title")
+      !key.toLowerCase().includes("title"),
   );
 
   if (onlyKeys) return itemKeys;
@@ -109,7 +109,7 @@ function getDatasetFilterOptions(dataset, dataTypes, onlyKeys, appliedFilters) {
             count: o.count,
           })),
           "label",
-          dataTypes[key] === "number" ? "desc" : "asc"
+          dataTypes[key] === "number" ? "desc" : "asc",
         ),
       });
     }
@@ -127,7 +127,7 @@ function filterData(parsedDataset, appliedFilters) {
   const filteredData = _.filter(parsedDataset, (item) => {
     // Check if all conditions hold for each 'filterKey'
     return filterKeys.every((filterKey) =>
-      appliedFilters[filterKey]?.includes(item[filterKey])
+      appliedFilters[filterKey]?.includes(item[filterKey]),
     );
   });
 
@@ -140,7 +140,7 @@ function renderChart(
   initialParsedDataset,
   id,
   itemAppliedFilters,
-  vizType
+  vizType,
 ) {
   const chart = charts[vizType];
   let header = "";
@@ -187,7 +187,7 @@ function renderChart(
         initialParsedDataset,
         parsed.dataTypes,
         null,
-        itemAppliedFilters || item.appliedFilters
+        itemAppliedFilters || item.appliedFilters,
       ),
       enabledFilterOptionGroups: item.enabledFilterOptionGroups,
       dataTypes: parsed.dataTypes,
@@ -208,7 +208,7 @@ function renderChart(
   } catch (e) {
     console.log(e);
     winstonLogger.error(
-      `route <utils/renderchart/index.js>;fn <renderChart()>: Error rendering chart: ${e}`
+      `route <utils/renderchart/index.js>;fn <renderChart()>: Error rendering chart: ${e}`,
     );
   }
 }
@@ -217,17 +217,17 @@ export async function renderChartData(
   id,
   body,
   chartData,
-  parsedDataFilesPath
+  parsedDataFilesPath,
 ) {
   winstonLogger.debug(
-    `route <utils/renderchart/index.js>;fn <renderChartData()>: Starting render chart process for chart with id: ${id}`
+    `route <utils/renderchart/index.js>;fn <renderChartData()>: Starting render chart process for chart with id: ${id}`,
   );
 
   let internalData;
   if (id === "new" || body.rows) {
     if (!body.rows || body.rows.length === 0) {
       winstonLogger.error(
-        `route <utils/renderchart/index.js>;fn <renderChartData()>: Error rendering chart: No rows`
+        `route <utils/renderchart/index.js>;fn <renderChartData()>: Error rendering chart: No rows`,
       );
       return { error: "no rows" };
     }
@@ -244,12 +244,12 @@ export async function renderChartData(
 
   try {
     const parsedData = fs.readFileSync(
-      `${parsedDataFilesPath}${item?.datasetId}.json`
+      `${parsedDataFilesPath}${item?.datasetId}.json`,
     );
     parsed = JSON.parse(parsedData.toString());
   } catch (error) {
     winstonLogger.error(
-      `route <utils/renderchart/index.js>;fn <renderChartData()>: Error reading parsed data file: ${error}`
+      `route <utils/renderchart/index.js>;fn <renderChartData()>: Error reading parsed data file: ${error}`,
     );
     console.log("Error reading parsed data file", error);
   }
@@ -261,7 +261,7 @@ export async function renderChartData(
     parsed.dataset = filterData(
       parsed.dataset,
 
-      itemAppliedFilters || item.appliedFilters
+      itemAppliedFilters || item.appliedFilters,
     );
   }
   let renderedChart;
@@ -273,22 +273,22 @@ export async function renderChartData(
       initialParsedDataset,
       id,
       itemAppliedFilters,
-      item.vizType
+      item.vizType,
     );
     // Return the rendered chart item
     // json stringify and save to ./rendered.json
     fs.writeFileSync(
       `${__dirname}/rendering/${id}_rendered.json`,
-      JSON.stringify(renderedChart)
+      JSON.stringify(renderedChart),
     );
     winstonLogger.debug(
-      `route <utils/renderchart/index.js>;fn <renderChartData()>: Render chart success`
+      `route <utils/renderchart/index.js>;fn <renderChartData()>: Render chart success`,
     );
     console.log("Success...");
   } catch (e) {
     console.log(e);
     winstonLogger.error(
-      `route <utils/renderchart/index.js>;fn <renderChartData()>: Error rendering chart: ${e}`
+      `route <utils/renderchart/index.js>;fn <renderChartData()>: Error rendering chart: ${e}`,
     );
   }
 }
@@ -297,17 +297,17 @@ try {
   // if argv2 is undefined, return error
   if (process.argv[2] === undefined) {
     winstonLogger.error(
-      "route <utils/renderchart/index.js>: process.argv[2] undefined"
+      "route <utils/renderchart/index.js>: process.argv[2] undefined",
     );
     console.error("No id provided");
   } else if (process.argv[3] === undefined) {
     winstonLogger.error(
-      "route <utils/renderchart/index.js>: process.argv[3] undefined"
+      "route <utils/renderchart/index.js>: process.argv[3] undefined",
     );
     console.error("No parsedDataFilesPath provided");
   } else {
     winstonLogger.debug(
-      `route <utils/renderchart/index.js>: process.argv[2]: ${process.argv[2]}`
+      `route <utils/renderchart/index.js>: process.argv[2]: ${process.argv[2]}`,
     );
 
     // read the first argument as id
@@ -320,12 +320,12 @@ try {
     const chartData = parsedData.chartData;
     renderChartData(id, body, chartData, parsedDataFilesPath);
     winstonLogger.debug(
-      `route <utils/renderchart/index.js>: Rendered chart with id: ${id}`
+      `route <utils/renderchart/index.js>: Rendered chart with id: ${id}`,
     );
   }
 } catch (error) {
   winstonLogger.error(
-    `route <utils/renderchart/index.js>: Error rendering chart: ${"error"}`
+    `route <utils/renderchart/index.js>: Error rendering chart: ${"error"}`,
   );
   console.error("Something went wrong...\n");
 }
