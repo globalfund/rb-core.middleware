@@ -1,4 +1,10 @@
-import { injectable, Component, config, ContextTags } from "@loopback/core";
+import {
+  injectable,
+  Component,
+  config,
+  ContextTags,
+  inject,
+} from "@loopback/core";
 import { LOGGER_KEY, RbCoreMiddlewareComponentBindings } from "./keys";
 import {
   DEFAULT_RB_CORE_MIDDLEWARE_OPTIONS,
@@ -27,6 +33,7 @@ import {
   ReportService,
 } from "./services";
 import { AssetService } from "./services/asset.service";
+import { DataSource } from "loopback-datasource-juggler";
 
 export let redisClient: ReturnType<typeof createClient>;
 
@@ -47,12 +54,13 @@ export class RbCoreMiddlewareComponent implements Component {
   constructor(
     @config()
     private options: RbCoreMiddlewareComponentOptions = DEFAULT_RB_CORE_MIDDLEWARE_OPTIONS,
+    @inject("datasources.db") private datasourceDB: DataSource,
   ) {
     redisConnection(this.options).catch((error) => {
       console.error("Redis Connection Error: ", error);
     });
     this.datasources = {
-      "datasources.db": this.options.datasourceDB,
+      "datasources.db": this.datasourceDB,
     };
   }
 

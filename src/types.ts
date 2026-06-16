@@ -1,5 +1,3 @@
-import { DataSource } from "loopback-datasource-juggler";
-
 /**
  * Interface defining the component's options object
  */
@@ -8,7 +6,6 @@ export interface RbCoreMiddlewareComponentOptions {
   REDIS_HOST?: string;
   REDIS_PASSWORD?: string;
   REDIS_USERNAME?: string;
-  datasourceDB?: DataSource;
 }
 
 /**
