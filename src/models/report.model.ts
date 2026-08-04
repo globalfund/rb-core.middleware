@@ -35,9 +35,7 @@ export class ReportModel extends Entity {
   items: {
     id: string; // string: chart id, object: formatted text
     type: string;
-    open: boolean;
-    focus?: boolean;
-    key?: string;
+    initialized: boolean;
     options?: Record<string, any>;
     data?: any;
   }[];
