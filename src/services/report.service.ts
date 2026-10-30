@@ -6,7 +6,6 @@ import {
   repository,
   Where,
 } from "@loopback/repository";
-import _ from "lodash";
 import {
   ChartRepository,
   DatasetRepository,
@@ -17,6 +16,12 @@ import { getCache, handleDeleteCache, setCache } from "../utils/redis";
 import { Logger } from "winston";
 import { LOGGER_KEY } from "../keys";
 import { ReportModel, FolderModel } from "../models";
+import {
+  assertCanRead,
+  assertOwner,
+  omitServerManagedFields,
+  withStoredServerManagedFields,
+} from "../utils/access";
 
 export class ReportService {
   constructor(
@@ -38,11 +43,15 @@ export class ReportService {
   async create(
     userId: string,
     report: Omit<ReportModel, "id">,
-  ): Promise<ReportModel | { error: string; errorType: string }> {
+  ): Promise<ReportModel> {
     this.logger.info(`ReportService - create - creating a new report`);
-    report.owner = userId;
+    const data = omitServerManagedFields(report);
+    if (data.folderId) {
+      const folder = await this.folderRepository.findById(data.folderId);
+      assertOwner(folder, userId, "Forbidden: You do not own this folder");
+    }
     await handleDeleteCache({ asset: "story", userId });
-    return await this.reportRepository.create(report);
+    return this.reportRepository.create({ ...data, owner: userId });
   }
 
   async count(userId: string, where?: Where<ReportModel>): Promise<Count> {
@@ -122,34 +131,30 @@ export class ReportService {
     userIds: string[],
     id: string,
     filter?: FilterExcludingWhere<ReportModel>,
-  ): Promise<ReportModel | { error: string }> {
+  ): Promise<ReportModel> {
     this.logger.info(`ReportService - findById - getting report by id ${id}`);
     const report = await this.reportRepository.findById(id, filter);
-    if (
-      report.public ||
-      report.baseline ||
-      userIds.indexOf(_.get(report, "owner", "")) !== -1
-    ) {
-      return report;
-    }
-    this.logger.info(`ReportService - findById - unauthorized`);
-    return { error: "Unauthorized", name: report.name };
+    assertCanRead(
+      report,
+      userIds,
+      "Forbidden: You do not have access to this report",
+    );
+    return report;
   }
 
   async updateById(
     userId: string,
     id: string,
     report: ReportModel,
-  ): Promise<void | { error: string }> {
+  ): Promise<void> {
     this.logger.info(
       `ReportService - updateById - updating report by id ${id}`,
     );
     const dbReport = await this.reportRepository.findById(id);
-    if (dbReport.owner !== userId) {
-      return { error: "Unauthorized" };
-    }
+    assertOwner(dbReport, userId, "Forbidden: You do not own this report");
+    // Folder moves go through FolderService.addReport.
     await this.reportRepository.updateById(id, {
-      ...report,
+      ...omitServerManagedFields(report, ["folderId"]),
       updatedDate: new Date().toISOString(),
     });
     await handleDeleteCache({ asset: "story", assetId: id, userId });
@@ -159,44 +164,42 @@ export class ReportService {
     userId: string,
     id: string,
     report: ReportModel,
-  ): Promise<void | { error: string }> {
+  ): Promise<void> {
     this.logger.info(
       `ReportService - replaceById - updating report by id ${id}`,
     );
     const dbReport = await this.reportRepository.findById(id);
-    if (dbReport.owner !== userId) {
-      return { error: "Unauthorized" };
-    }
+    assertOwner(dbReport, userId, "Forbidden: You do not own this report");
     this.logger.info(
       `ReportService - replaceById - replacing report by id ${id}`,
     );
-    await this.reportRepository.replaceById(id, report);
+    await this.reportRepository.replaceById(
+      id,
+      withStoredServerManagedFields(report, dbReport, ["folderId"]),
+    );
     await handleDeleteCache({ asset: "story", assetId: id, userId });
   }
 
-  async deleteById(
-    userId: string,
-    id: string,
-  ): Promise<void | { error: string }> {
+  async deleteById(userId: string, id: string): Promise<void> {
     this.logger.info(
       `ReportService - deleteById - deleting report by id ${id}`,
     );
     const dbReport = await this.reportRepository.findById(id);
-    if (dbReport.owner !== userId) {
-      return { error: "Unauthorized" };
-    }
+    assertOwner(dbReport, userId, "Forbidden: You do not own this report");
     await this.reportRepository.deleteById(id);
     await handleDeleteCache({ asset: "story", assetId: id, userId });
   }
 
-  async duplicate(
-    userId: string,
-    id: string,
-  ): Promise<ReportModel | { error: string; errorType: string }> {
+  async duplicate(userId: string, id: string): Promise<ReportModel> {
     this.logger.info(
       `ReportService - duplicate - duplicating report by id ${id}`,
     );
     const fReport = await this.reportRepository.findById(id);
+    assertCanRead(
+      fReport,
+      [userId],
+      "Forbidden: You do not have access to this report",
+    );
     // Duplicate Story
     const newStory = await this.reportRepository.create({
       name: `${fReport.name} (Copy)`,

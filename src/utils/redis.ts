@@ -21,6 +21,8 @@ export const handleDeleteCache = async (options: {
   if (options.assetId) {
     await redisClient.del(`${options.asset}-detail-${options.assetId}`);
     await redisClient.del(`public-${options.asset}-detail-${options.assetId}`);
+    // Detail entries cached per filter, e.g. `chart-detail-<id>-<filter>`.
+    await deleteKeysWithPattern(`${options.asset}-detail-${options.assetId}-*`);
   }
   if (options.userId) {
     const assetPlural =
