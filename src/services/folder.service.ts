@@ -6,7 +6,6 @@ import {
   repository,
   Where,
 } from "@loopback/repository";
-import _ from "lodash";
 import {
   FolderRepository,
   AssetRepository,
@@ -16,6 +15,13 @@ import { getCache, handleDeleteCache, setCache } from "../utils/redis";
 import { Logger } from "winston";
 import { LOGGER_KEY } from "../keys";
 import { FolderModel, AssetModel, ReportModel } from "../models";
+import {
+  assertCanRead,
+  assertOwner,
+  badRequest,
+  omitServerManagedFields,
+  withStoredServerManagedFields,
+} from "../utils/access";
 
 export class FolderService {
   constructor(
@@ -34,11 +40,19 @@ export class FolderService {
   async create(
     userId: string,
     folder: Omit<FolderModel, "id">,
-  ): Promise<FolderModel | { error: string; errorType: string }> {
+  ): Promise<FolderModel> {
     this.logger.info(`FolderService - create - creating a new folder`);
-    folder.owner = userId;
+    const data = omitServerManagedFields(folder);
+    if (data.parentId) {
+      const parent = await this.folderRepository.findById(data.parentId);
+      assertOwner(
+        parent,
+        userId,
+        "Forbidden: You do not own the parent folder",
+      );
+    }
     await handleDeleteCache({ asset: "folder", userId });
-    return await this.folderRepository.create(folder);
+    return this.folderRepository.create({ ...data, owner: userId });
   }
 
   async count(userId: string, where?: Where<FolderModel>): Promise<Count> {
@@ -151,7 +165,7 @@ export class FolderService {
     userIds: string[],
     id: string,
     filter?: FilterExcludingWhere<FolderModel>,
-  ): Promise<FolderModel | { error: string }> {
+  ): Promise<FolderModel> {
     this.logger.info(`FolderService - findById - getting folder by id ${id}`);
     const folder = await this.folderRepository.findById(id, {
       ...filter,
@@ -165,12 +179,12 @@ export class FolderService {
         "parentId",
       ],
     });
-    if (
-      !(folder.public || userIds.indexOf(_.get(folder, "owner", "")) !== -1)
-    ) {
-      this.logger.info(`FolderService - findById - unauthorized`);
-      return { error: "Unauthorized", name: folder.name } as any;
-    }
+    // Folders have no baseline flag; only public or owned folders are readable.
+    assertCanRead(
+      { owner: folder.owner, public: folder.public },
+      userIds,
+      "Forbidden: You do not have access to this folder",
+    );
 
     const [assets, reports, children] = await Promise.all([
       this.assetRepository.find({
@@ -258,16 +272,15 @@ export class FolderService {
     userId: string,
     id: string,
     folder: FolderModel,
-  ): Promise<void | { error: string }> {
+  ): Promise<void> {
     this.logger.info(
       `FolderService - updateById - updating folder by id ${id}`,
     );
     const dbFolder = await this.folderRepository.findById(id);
-    if (dbFolder.owner !== userId) {
-      return { error: "Unauthorized" };
-    }
+    assertOwner(dbFolder, userId, "Forbidden: You do not own this folder");
+    // Moves go through addFolder/moveFolder, which check for cycles.
     await this.folderRepository.updateById(id, {
-      ...folder,
+      ...omitServerManagedFields(folder, ["parentId"]),
       updatedDate: new Date().toISOString(),
     });
     await handleDeleteCache({ asset: "folder", assetId: id, userId });
@@ -277,44 +290,42 @@ export class FolderService {
     userId: string,
     id: string,
     folder: FolderModel,
-  ): Promise<void | { error: string }> {
+  ): Promise<void> {
     this.logger.info(
       `FolderService - replaceById - updating folder by id ${id}`,
     );
     const dbFolder = await this.folderRepository.findById(id);
-    if (dbFolder.owner !== userId) {
-      return { error: "Unauthorized" };
-    }
+    assertOwner(dbFolder, userId, "Forbidden: You do not own this folder");
     this.logger.info(
       `FolderService - replaceById - replacing folder by id ${id}`,
     );
-    await this.folderRepository.replaceById(id, folder);
+    await this.folderRepository.replaceById(
+      id,
+      withStoredServerManagedFields(folder, dbFolder, ["parentId"]),
+    );
     await handleDeleteCache({ asset: "folder", assetId: id, userId });
   }
 
-  async deleteById(
-    userId: string,
-    id: string,
-  ): Promise<void | { error: string }> {
+  async deleteById(userId: string, id: string): Promise<void> {
     this.logger.info(
       `FolderService - deleteById - deleting folder by id ${id}`,
     );
     const dbFolder = await this.folderRepository.findById(id);
-    if (dbFolder.owner !== userId) {
-      return { error: "Unauthorized" };
-    }
+    assertOwner(dbFolder, userId, "Forbidden: You do not own this folder");
     await this.folderRepository.deleteById(id);
     await handleDeleteCache({ asset: "folder", assetId: id, userId });
   }
 
-  async duplicate(
-    userId: string,
-    id: string,
-  ): Promise<FolderModel | { error: string; errorType: string }> {
+  async duplicate(userId: string, id: string): Promise<FolderModel> {
     this.logger.info(
       `FolderService - duplicate - duplicating folder by id ${id}`,
     );
     const fFolder = await this.folderRepository.findById(id);
+    assertCanRead(
+      { owner: fFolder.owner, public: fFolder.public },
+      [userId],
+      "Forbidden: You do not have access to this folder",
+    );
 
     const newFolder = await this.folderRepository.create({
       name: `${fFolder.name} (Copy)`,
@@ -384,28 +395,19 @@ export class FolderService {
     userId: string,
     folderId: string,
     assetId: string,
-  ): Promise<FolderModel | { error: string; errorType: string }> {
+  ): Promise<FolderModel> {
     this.logger.info(
       `FolderService - addAsset - adding asset ${assetId} to folder ${folderId}`,
     );
 
     // Check if user owns the folder
     const folder = await this.folderRepository.findById(folderId);
-    if (folder.owner !== userId) {
-      throw {
-        statusCode: 403,
-        message: "Forbidden: You do not own this folder",
-      };
-    }
+    assertOwner(folder, userId, "Forbidden: You do not own this folder");
 
-    // Check if user owns the asset or if asset is public/baseline
+    // Public/baseline assets are readable by everyone, but only the owner may
+    // move one, otherwise it would leave its owner's folder.
     const asset = await this.assetRepository.findById(assetId);
-    if (asset.owner !== userId && !asset.public && !asset.baseline) {
-      throw {
-        statusCode: 403,
-        message: "Forbidden: You do not have access to this asset",
-      };
-    }
+    assertOwner(asset, userId, "Forbidden: You do not own this asset");
 
     // Set the asset's folderId
     await this.assetRepository.updateById(assetId, {
@@ -422,7 +424,7 @@ export class FolderService {
     userId: string,
     folderId: string,
     assetId: string,
-  ): Promise<FolderModel | { error: string; errorType: string }> {
+  ): Promise<FolderModel> {
     this.logger.info(
       `FolderService - removeAsset - removing asset ${assetId} from folder ${folderId}`,
     );
@@ -475,10 +477,15 @@ export class FolderService {
     folderId: string,
     reportId: string,
     reportPrevFolderId?: string,
-  ): Promise<FolderModel | { error: string; errorType: string }> {
+  ): Promise<FolderModel> {
     this.logger.info(
       `FolderService - addReport - adding report ${reportId} to folder ${folderId}`,
     );
+
+    // Required for every target, including the root. Public/baseline reports
+    // are readable by everyone, but only the owner may move one.
+    const report = await this.reportRepository.findById(reportId);
+    assertOwner(report, userId, "Forbidden: You do not own this report");
 
     if (folderId === "__root__") {
       await this.reportRepository.updateById(reportId, {
@@ -498,21 +505,7 @@ export class FolderService {
 
     // Check if user owns the folder
     const folder = await this.folderRepository.findById(folderId);
-    if (folder.owner !== userId) {
-      throw {
-        statusCode: 403,
-        message: "Forbidden: You do not own this folder",
-      };
-    }
-
-    // Check if user owns the report or if report is public/baseline
-    const report = await this.reportRepository.findById(reportId);
-    if (report.owner !== userId && !report.public && !report.baseline) {
-      throw {
-        statusCode: 403,
-        message: "Forbidden: You do not have access to this report",
-      };
-    }
+    assertOwner(folder, userId, "Forbidden: You do not own this folder");
 
     // Set the report's folderId
     await this.reportRepository.updateById(reportId, {
@@ -536,7 +529,7 @@ export class FolderService {
     userId: string,
     folderId: string,
     reportId: string,
-  ): Promise<FolderModel | { error: string; errorType: string }> {
+  ): Promise<FolderModel> {
     this.logger.info(
       `FolderService - removeReport - removing report ${reportId} from folder ${folderId}`,
     );
@@ -569,10 +562,15 @@ export class FolderService {
     parentFolderId: string,
     folderItemId: string,
     folderPrevFolderId?: string,
-  ): Promise<FolderModel | { error: string; errorType: string }> {
+  ): Promise<FolderModel> {
     this.logger.info(
       `FolderService - addFolder - adding folder ${folderItemId} to folder ${parentFolderId}`,
     );
+
+    // Required for every target, including the root. Public folders are
+    // readable by everyone, but only the owner may move one.
+    const folderItem = await this.folderRepository.findById(folderItemId);
+    assertOwner(folderItem, userId, "Forbidden: You do not own this folder");
 
     if (parentFolderId === "__root__") {
       await this.folderRepository.updateById(folderItemId, {
@@ -590,22 +588,17 @@ export class FolderService {
       return { id: "__root__", name: "My Workspace" } as FolderModel;
     }
 
-    // Check if user owns the folder
+    // Check if user owns the target folder
     const folder = await this.folderRepository.findById(parentFolderId);
-    if (folder.owner !== userId) {
-      throw {
-        statusCode: 403,
-        message: "Forbidden: You do not own this folder",
-      };
-    }
+    assertOwner(folder, userId, "Forbidden: You do not own the target folder");
 
-    // Check if user owns the folder or if folder is public/baseline
-    const folderItem = await this.folderRepository.findById(folderItemId);
-    if (folderItem.owner !== userId && !folderItem.public) {
-      throw {
-        statusCode: 403,
-        message: "Forbidden: You do not have access to this folder",
-      };
+    if (
+      parentFolderId === folderItemId ||
+      (await this.isDescendant(folderItemId, parentFolderId))
+    ) {
+      throw badRequest(
+        "Cannot move a folder into itself or one of its subfolders",
+      );
     }
 
     // Set the folder's parentId
@@ -691,29 +684,29 @@ export class FolderService {
     userId: string,
     folderId: string,
     newParentId?: string,
-  ): Promise<void | { error: string }> {
+  ): Promise<void> {
     this.logger.info(
       `FolderService - moveFolder - moving folder ${folderId} to parent ${newParentId}`,
     );
 
     const folder = await this.folderRepository.findById(folderId);
-    if (folder.owner !== userId) {
-      return { error: "Forbidden: You do not own this folder" };
-    }
+    assertOwner(folder, userId, "Forbidden: You do not own this folder");
 
     if (newParentId) {
       const newParent = await this.folderRepository.findById(newParentId);
-      if (newParent.owner !== userId) {
-        return { error: "Forbidden: You do not own the target parent folder" };
-      }
+      assertOwner(
+        newParent,
+        userId,
+        "Forbidden: You do not own the target parent folder",
+      );
 
       if (newParentId === folderId) {
-        return { error: "Cannot move folder to itself" };
+        throw badRequest("Cannot move folder to itself");
       }
 
       const isDescendant = await this.isDescendant(folderId, newParentId);
       if (isDescendant) {
-        return { error: "Cannot move folder to its own descendant" };
+        throw badRequest("Cannot move folder to its own descendant");
       }
     }
 
@@ -729,17 +722,24 @@ export class FolderService {
     ancestorId: string,
     descendantId: string,
   ): Promise<boolean> {
-    const descendant = await this.folderRepository.findById(descendantId);
+    // Walk up the parent chain. `visited` stops on cycles already in the data,
+    // and a missing parent (deleted folder) ends the chain.
+    const visited = new Set<string>([descendantId]);
+    let current = await this.folderRepository.findOne({
+      where: { id: descendantId },
+    });
 
-    if (!descendant.parentId) {
-      return false;
+    while (current?.parentId && !visited.has(current.parentId)) {
+      if (current.parentId === ancestorId) {
+        return true;
+      }
+      visited.add(current.parentId);
+      current = await this.folderRepository.findOne({
+        where: { id: current.parentId },
+      });
     }
 
-    if (descendant.parentId === ancestorId) {
-      return true;
-    }
-
-    return this.isDescendant(ancestorId, descendant.parentId);
+    return false;
   }
 
   async getFolderPath(
@@ -758,15 +758,20 @@ export class FolderService {
       };
     }
 
+    // Same walk as isDescendant: `visited` stops on cycles already in the data,
+    // and a missing parent (deleted folder) ends the path.
     const path: FolderModel[] = [folder];
-    let currentFolder = folder;
+    const visited = new Set<string>([folder.id]);
+    let currentFolder: FolderModel | null = folder;
 
-    while (currentFolder.parentId) {
-      const parent = await this.folderRepository.findById(
-        currentFolder.parentId,
-      );
-      path.unshift(parent);
-      currentFolder = parent;
+    while (currentFolder?.parentId && !visited.has(currentFolder.parentId)) {
+      visited.add(currentFolder.parentId);
+      currentFolder = await this.folderRepository.findOne({
+        where: { id: currentFolder.parentId },
+      });
+      if (currentFolder) {
+        path.unshift(currentFolder);
+      }
     }
 
     return path;

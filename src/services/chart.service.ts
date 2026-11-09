@@ -15,6 +15,14 @@ import { getCache, handleDeleteCache, setCache } from "../utils/redis";
 import { inject } from "@loopback/core";
 import { LOGGER_KEY } from "../keys";
 import { Logger } from "winston";
+import {
+  assertCanRead,
+  assertOwner,
+  canRead,
+  forbidden,
+  omitServerManagedFields,
+  withStoredServerManagedFields,
+} from "../utils/access";
 
 async function renderChart(
   chartRepository: ChartRepository,
@@ -102,11 +110,13 @@ export class ChartService {
   async create(
     userId: string,
     chart: Omit<ChartModel, "id">,
-  ): Promise<ChartModel | { error: string; errorType: string }> {
-    chart.owner = userId;
+  ): Promise<ChartModel> {
     this.logger.info(`ChartService - create - Creating chart: ${chart.name}`);
     await handleDeleteCache({ asset: "chart", userId });
-    return await this.chartRepository.create(chart);
+    return this.chartRepository.create({
+      ...omitServerManagedFields(chart),
+      owner: userId,
+    });
   }
 
   async sampleData(
@@ -115,13 +125,11 @@ export class ChartService {
     backendApiBaseUrl: string,
   ) {
     const dataset = await this.datasetRepository.findById(datasetId);
-    if (
-      !dataset.public &&
-      !dataset.baseline &&
-      userIds.indexOf(_.get(dataset, "owner", "")) === -1
-    ) {
-      return { error: "Unauthorized" };
-    }
+    assertCanRead(
+      dataset,
+      userIds,
+      "Forbidden: You do not have access to this dataset",
+    );
     const cachedData = await getCache(`dataset-sample-data-${datasetId}`);
     if (cachedData) {
       this.logger.info(
@@ -276,47 +284,45 @@ export class ChartService {
     id: string,
     userIds: string[],
     filter?: FilterExcludingWhere<ChartModel>,
-  ): Promise<ChartModel | { name: string; error: string }> {
+  ): Promise<ChartModel> {
     this.logger.info(`ChartService - findById - Fetching chart - ${id}`);
     this.logger.debug(
       `Finding chart - ${id} with filter - ${JSON.stringify(filter)}`,
     );
-    const cachedData = await getCache(`chart-${id}-${JSON.stringify(filter)}`);
+    // The `chart-detail-<id>` prefix lets handleDeleteCache clear every filter
+    // variant when the chart changes. The key is shared by all users, so cached
+    // charts need the same access check as fresh ones.
+    const cacheKey = `chart-detail-${id}-${JSON.stringify(filter)}`;
+    const cachedData = await getCache(cacheKey);
+    const chart: ChartModel =
+      cachedData ?? (await this.chartRepository.findById(id, filter));
+    if (!canRead(chart, userIds)) {
+      this.logger.error(
+        `ChartService - findById - Unauthorized access to chart - ${id}`,
+      );
+      throw forbidden("Forbidden: You do not have access to this chart");
+    }
     if (cachedData) {
       this.logger.info(
         `ChartService - findById - Returning cached chart - ${id}`,
       );
-      return cachedData;
-    }
-    const chart = await this.chartRepository.findById(id, filter);
-    if (
-      chart.public ||
-      chart.baseline ||
-      userIds.indexOf(_.get(chart, "owner", "")) !== -1
-    ) {
-      this.logger.info(`ChartService - findById - Chart - ${id} found`);
-      setCache(`chart-${id}-${JSON.stringify(filter)}`, chart);
-      return chart;
     } else {
-      this.logger.error(
-        `ChartService - findById - Unauthorized access to chart - ${id}`,
-      );
-      return { name: chart.name, error: "Unauthorized" };
+      this.logger.info(`ChartService - findById - Chart - ${id} found`);
+      setCache(cacheKey, chart);
     }
+    return chart;
   }
 
   async updateById(
     id: string,
     userId: string,
     chart: ChartModel,
-  ): Promise<ChartModel | { error: string }> {
+  ): Promise<ChartModel> {
     const dbChart = await this.chartRepository.findById(id);
-    if (dbChart.owner !== userId) {
-      return { error: "Unauthorized" };
-    }
+    assertOwner(dbChart, userId, "Forbidden: You do not own this chart");
 
     await this.chartRepository.updateById(id, {
-      ...chart,
+      ...omitServerManagedFields(chart),
       updatedDate: new Date().toISOString(),
     });
     this.logger.info(`ChartService - updateById - Updating chart - ${id}`);
@@ -332,13 +338,14 @@ export class ChartService {
     id: string,
     userId: string,
     chart: ChartModel,
-  ): Promise<void | { error: string }> {
+  ): Promise<void> {
     const dbChart = await this.chartRepository.findById(id);
-    if (dbChart.owner !== userId) {
-      return { error: "Unauthorized" };
-    }
+    assertOwner(dbChart, userId, "Forbidden: You do not own this chart");
     this.logger.info(`ChartService - replaceById - Replacing chart - ${id}`);
-    await this.chartRepository.replaceById(id, chart);
+    await this.chartRepository.replaceById(
+      id,
+      withStoredServerManagedFields(chart, dbChart),
+    );
     await handleDeleteCache({
       asset: "chart",
       assetId: id,
@@ -346,14 +353,9 @@ export class ChartService {
     });
   }
 
-  async deleteById(
-    id: string,
-    userId: string,
-  ): Promise<void | { error: string }> {
+  async deleteById(id: string, userId: string): Promise<void> {
     const dbChart = await this.chartRepository.findById(id);
-    if (dbChart.owner !== userId) {
-      return { error: "Unauthorized" };
-    }
+    assertOwner(dbChart, userId, "Forbidden: You do not own this chart");
     this.logger.info(`ChartService - deleteById - Deleting chart - ${id}`);
     await this.chartRepository.deleteById(id);
     await handleDeleteCache({
@@ -363,12 +365,14 @@ export class ChartService {
     });
   }
 
-  async duplicate(
-    id: string,
-    userId: string,
-  ): Promise<ChartModel | { error: string; errorType: string }> {
+  async duplicate(id: string, userId: string): Promise<ChartModel> {
     this.logger.info(`ChartService - duplicate - Duplicating chart - ${id}`);
     const fChart = await this.chartRepository.findById(id);
+    assertCanRead(
+      fChart,
+      [userId],
+      "Forbidden: You do not have access to this chart",
+    );
 
     const newChart = await this.chartRepository.create({
       name: `${fChart.name} (Copy)`,
@@ -400,6 +404,13 @@ export class ChartService {
       id === "new"
         ? { datasetId: body.rows[0][0].datasetId }
         : await this.chartRepository.findById(id);
+    if (id !== "new") {
+      assertCanRead(
+        chartData as ChartModel,
+        [userId],
+        "Forbidden: You do not have access to this chart",
+      );
+    }
 
     let parsed = null;
 
