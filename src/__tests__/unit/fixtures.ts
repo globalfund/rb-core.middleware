@@ -12,6 +12,7 @@ import {
 import {
   AssetService,
   ChartService,
+  DatasetService,
   FolderService,
   ReportService,
 } from "../../services";
@@ -109,6 +110,12 @@ export function givenServices() {
     folderService: new FolderService(
       folderRepository,
       assetRepository,
+      reportRepository,
+      silentLogger,
+    ),
+    datasetService: new DatasetService(
+      datasetRepository,
+      chartRepository,
       reportRepository,
       silentLogger,
     ),
