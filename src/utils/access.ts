@@ -77,3 +77,25 @@ export const assertCanRead = (
     throw forbidden(message);
   }
 };
+
+export const unsupportedMediaType = (message: string) =>
+  httpError(415, "UnsupportedMediaTypeError", message);
+
+export const unprocessable = (message: string) =>
+  httpError(422, "UnprocessableEntityError", message);
+
+export const badGateway = (message: string) =>
+  httpError(502, "BadGatewayError", message);
+
+const SAFE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+/**
+ * Ids are interpolated into file paths and backend URLs, so only plain
+ * identifiers (Mongo ids, dataset names like `gf_allocations`) are allowed.
+ */
+export const assertSafeId = (value: unknown, label = "id"): string => {
+  if (typeof value !== "string" || !SAFE_ID_PATTERN.test(value)) {
+    throw badRequest(`Invalid ${label}`);
+  }
+  return value;
+};

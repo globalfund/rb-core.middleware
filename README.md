@@ -69,7 +69,13 @@ new RbCoreMiddlewareComponent(options);
 ### Services
 
 - **ChartService**: Handles chart creation, rendering, and caching.
-- **DatasetService**: Handles dataset creation and cache management.
+- **DatasetService**: Handles dataset creation and cache management, and works with the data backend ([rb-core-backend](https://github.com/globalfund/rb-core.backend)) to add datasets:
+  - `findOwn` and `findPublic` list the datasets of a user, or the ones everyone may see.
+  - `searchExternalSources` and `externalSourceCounts` search and count the external sources (Kaggle, WHO, ...) the backend indexed.
+  - `connectExternalDataset` has the backend download a search result, and creates the dataset for it.
+  - `uploadDataset` has the backend process an uploaded file (`DATASET_UPLOAD_FILE_EXTENSIONS`), and creates the dataset for it.
+
+  Datasets are created private, and removed again when the backend could not store their data. The backend is passed as `{baseUrl, apiKey}`; reading the upload from the request (for example with multer) is left to the application.
 - **ReportService**: Handles report creation, rendering, and caching.
 
 ### Utilities
